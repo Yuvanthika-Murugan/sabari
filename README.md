@@ -707,6 +707,3 @@ From the first version to now, oldest first. The project is not under version co
 - **Printing**: clean A4 printouts with the company letterhead, all table rows and no screen controls.
 - **Responsive layout**: slide-in menu on phones and tablets, single-column forms on phones, stacked page headers and filters.
 - This README: setup, validation rules, ER diagrams and this history.
-#   s a b a r i  
- #   s a b a r i  
- 
