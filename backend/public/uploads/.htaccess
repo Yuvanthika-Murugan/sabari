@@ -1,0 +1,12 @@
+# Uploaded photos: serve JPEGs only, never run scripts.
+Require all denied
+<FilesMatch "^[a-f0-9]{32}\.jpg$">
+    Require all granted
+</FilesMatch>
+Options -Indexes -ExecCGI
+RemoveHandler .php .phtml .phar
+RemoveType .php .phtml .phar
+<IfModule mod_headers.c>
+    Header set X-Content-Type-Options "nosniff"
+    Header set Content-Security-Policy "default-src 'none'"
+</IfModule>

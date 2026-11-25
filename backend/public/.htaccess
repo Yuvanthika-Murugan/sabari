@@ -1,0 +1,21 @@
+# The API front controller and uploaded photos are the only web-reachable files.
+Require all granted
+Options -Indexes
+
+RewriteEngine On
+
+# Pass the Authorization header through to PHP (Apache drops it by default).
+RewriteCond %{HTTP:Authorization} .
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+# Send every request that is not a real file to the front controller.
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^ index.php [QSA,L]
+
+# Never let anything other than index.php run as PHP here.
+<FilesMatch "\.(php|phtml|phar|php\d)$">
+    Require all denied
+</FilesMatch>
+<Files "index.php">
+    Require all granted
+</Files>

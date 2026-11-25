@@ -1,0 +1,104 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* Landing page section links scroll instead of jumping. */
+  html { scroll-behavior: smooth; }
+
+  /* Page scrollbar: slim navy thumb on a light track, gold on hover. */
+  html { scrollbar-width: thin; scrollbar-color: #173a7a #eef1f6; }
+  html::-webkit-scrollbar { width: 10px; height: 10px; }
+  html::-webkit-scrollbar-track { background: #eef1f6; }
+  html::-webkit-scrollbar-thumb { background: linear-gradient(#1e4a99, #0a1b3d); border-radius: 999px; border: 2px solid #eef1f6; }
+  html::-webkit-scrollbar-thumb:hover { background: linear-gradient(#e3ad33, #d4911e); }
+
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+  }
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+/* ---------- Print ----------
+ * Screen chrome (sidebar, top bar, buttons, filters, pagination) is hidden with
+ * Tailwind print: utilities in the components; this sets the page and tidies content. */
+@media print {
+  @page { size: A4 landscape; margin: 10mm; }
+
+  html, body { background: #fff !important; }
+  body {
+    font-size: 11px;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Cards print flat with a thin border instead of shadows. */
+  .shadow-card, .shadow-cardLg, .shadow-md, .shadow-sm { box-shadow: none !important; }
+  .animate-fade-in, .animate-slide-up { animation: none !important; }
+
+  /* Tables (DataTable and hand-built ones): full width, wrap long text,
+     nothing clipped by scroll containers, header repeated on every page. */
+  .overflow-x-auto, .overflow-hidden, .overflow-y-auto, [class*="max-h-"] { overflow: visible !important; max-height: none !important; }
+  .print-table { border-color: #d1d5db !important; border-radius: 0 !important; }
+  table { width: 100% !important; border-collapse: collapse; font-size: 10px; }
+  thead { position: static !important; display: table-header-group; }
+  th, td {
+    padding: 4px 6px !important;
+    white-space: normal !important;
+    border: 1px solid #d1d5db;
+    vertical-align: top;
+  }
+  th { background: #f3f4f6 !important; color: #111827 !important; }
+  tr { break-inside: avoid; page-break-inside: avoid; }
+  td img { width: 20px !important; height: 20px !important; }
+
+  /* The paper is narrower than a desktop screen; keep the desktop grid layout
+     so KPI cards and charts stay side by side instead of stacking. */
+  .sm\:grid-cols-2, .md\:grid-cols-2, .lg\:grid-cols-2, .xl\:grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  .md\:grid-cols-3, .lg\:grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+  .md\:grid-cols-4, .lg\:grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
+  .md\:grid-cols-5, .lg\:grid-cols-5 { grid-template-columns: repeat(5, minmax(0, 1fr)) !important; }
+  .lg\:col-span-1 { grid-column: span 1 / span 1 !important; }
+  .sm\:col-span-2, .md\:col-span-2, .lg\:col-span-2 { grid-column: span 2 / span 2 !important; }
+  .md\:col-span-3 { grid-column: span 3 / span 3 !important; }
+  .md\:col-span-4 { grid-column: span 4 / span 4 !important; }
+  /* ...except grids of tables: a table needs the full page width. */
+  .grid:has(> * table) { grid-template-columns: minmax(0, 1fr) !important; }
+  .grid:has(> * table) > * { grid-column: auto !important; }
+
+  /* Buttons and links that only work on screen. */
+  main button, .print-modal button { display: none !important; }
+
+  /* KPI cards and small boxes don't split across pages; tables may. */
+  .rounded-xl:not(:has(table)) { break-inside: avoid; }
+  h1, h2, h3 { break-after: avoid; }
+
+  /* A popup is open: print only the popup, as a normal page. */
+  body:has(> .print-modal) > *:not(.print-modal) { display: none !important; }
+  .print-modal { position: static !important; display: block !important; padding: 0 !important; }
+  .print-modal > div { width: 100% !important; }
+  .print-modal > div.rounded-xl { break-inside: auto; }
+}
+
+/* Landing hero / sign-in card entrance. */
+@keyframes hero-in {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: none; }
+}
+.animate-hero { animation: hero-in 0.8s ease-out both; }
+.animate-hero-delay { animation: hero-in 0.8s ease-out 0.25s both; }
+@media (prefers-reduced-motion: reduce) {
+  .animate-hero, .animate-hero-delay { animation: none; }
+}
+
+@layer components {
+  .scrollbar-thin::-webkit-scrollbar { width: 6px; height: 6px; }
+  .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+  .scrollbar-thin::-webkit-scrollbar-thumb { background: rgba(10,27,61,0.15); border-radius: 3px; }
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover { background: rgba(10,27,61,0.3); }
+}

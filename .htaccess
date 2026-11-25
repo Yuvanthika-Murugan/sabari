@@ -1,0 +1,5 @@
+# FinCollect — block web access to everything in the project folder.
+# Only backend/public (the API) re-allows access in its own .htaccess.
+# Without this, Apache would serve the source code, database dumps and backups.
+Require all denied
+Options -Indexes
