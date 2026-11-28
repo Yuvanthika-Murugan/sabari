@@ -17,6 +17,11 @@ export interface ReceiptData {
   amount: number;
   paymentMode: string;
   referenceNo: string;
+  /** Bank receipts: payer's UPI ID and account holder name. */
+  upiId?: string;
+  accountHolder?: string;
+  /** Cash notes counted, e.g. "500x2,100x3". */
+  denominations?: string;
   balance: number;
   staffName: string;
   companyAddress: string;
@@ -55,6 +60,9 @@ function ReceiptBody({ r }: { r: ReceiptData }) {
       </div>
       {row('Mode', modeLabel(r.paymentMode))}
       {r.referenceNo && row('Ref No', r.referenceNo)}
+      {r.upiId && row('UPI ID', r.upiId)}
+      {r.accountHolder && row('A/c Holder', r.accountHolder)}
+      {r.denominations && row('Notes', r.denominations.split(',').map(p => p.replace('x', '×')).join(' '))}
       {row('Balance', formatCurrency(r.balance))}
       {rule}
       {row('Collected by', r.staffName)}

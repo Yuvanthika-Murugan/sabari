@@ -10,7 +10,7 @@ USE fincollect;
 SET NAMES utf8mb4;
 
 SET FOREIGN_KEY_CHECKS = 0;
-DROP TABLE IF EXISTS settings, auctions, cash_transactions, customer_transfers, day_end_closings, audit_logs,
+DROP TABLE IF EXISTS settings, bid_payment_files, bid_payments, auctions, cash_transactions, customer_transfers, day_end_closings, audit_logs,
   notifications, withdrawals, vouchers, bank_transactions, bank_accounts, payment_approvals,
   collections, due_schedules, customers, agents, areas, chit_groups, chit_group_codes, login_attempts, api_tokens, users, branches;
 SET FOREIGN_KEY_CHECKS = 1;
@@ -104,8 +104,11 @@ CREATE TABLE agents (
   commission_pct  DECIMAL(5,2) NOT NULL DEFAULT 0,
   joining_date    DATE NULL,
   status          ENUM('active','inactive') NOT NULL DEFAULT 'active',
+  -- Login account (role staff) when the agent was given an email and password.
+  user_id         INT UNSIGNED NULL UNIQUE,
   created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_agents_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
   CONSTRAINT fk_agents_branch FOREIGN KEY (branch_id) REFERENCES branches(id)
 ) ENGINE=InnoDB;
 
@@ -180,6 +183,9 @@ CREATE TABLE customers (
   pincode             VARCHAR(10)  NOT NULL DEFAULT '',
   permanent_address   TINYINT(1)   NOT NULL DEFAULT 0,
   area                VARCHAR(120) NOT NULL DEFAULT '',
+  -- Map location of the customer (from a GPS receipt or set by staff on the spot).
+  latitude            DECIMAL(10,7) NULL,
+  longitude           DECIMAL(10,7) NULL,
   branch_id           INT UNSIGNED NOT NULL,
   staff_id            INT UNSIGNED NULL,
   agent_id            INT UNSIGNED NULL,
@@ -254,6 +260,11 @@ CREATE TABLE collections (
   pending_amount    DECIMAL(14,2) NOT NULL DEFAULT 0,
   payment_mode      ENUM('cash','upi','bank_transfer','cheque') NOT NULL,
   reference_no      VARCHAR(60) NOT NULL DEFAULT '',
+  upi_id            VARCHAR(60)  NOT NULL DEFAULT '',
+  account_holder    VARCHAR(120) NOT NULL DEFAULT '',
+  denominations     VARCHAR(255) NOT NULL DEFAULT '',
+  latitude          DECIMAL(10,7) NULL,
+  longitude         DECIMAL(10,7) NULL,
   collection_date   DATE NOT NULL,
   collection_time   TIME NOT NULL,
   remarks           VARCHAR(255) NOT NULL DEFAULT '',
@@ -396,6 +407,52 @@ CREATE TABLE vouchers (
   CONSTRAINT fk_vouchers_user FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB;
 
+-- Office expenses. Cash expenses are also posted to the cash book; the dashboard's
+-- Total Cash / Total Bank are reduced by cash / bank expenses respectively.
+-- agent_id records who received the money when it is an agent handover.
+CREATE TABLE expenses (
+  id            INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  expense_no    VARCHAR(20) NOT NULL UNIQUE,
+  expense_date  DATE NOT NULL,
+  category      VARCHAR(60) NOT NULL,
+  amount        DECIMAL(14,2) NOT NULL,
+  payment_mode  ENUM('cash','bank') NOT NULL,
+  agent_id      INT UNSIGNED NULL,
+  staff_id      INT UNSIGNED NULL,
+  remarks       VARCHAR(255) NOT NULL DEFAULT '',
+  created_by    INT UNSIGNED NULL,
+  created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_expense_date (expense_date),
+  CONSTRAINT fk_expenses_agent FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE SET NULL,
+  CONSTRAINT fk_expenses_staff FOREIGN KEY (staff_id) REFERENCES users(id) ON DELETE SET NULL,
+  CONSTRAINT fk_expenses_user FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+-- Latest position reported by each collection staff member's phone (one row per user).
+-- Cash handed over to the office by collection staff / agents (does not touch the cash book).
+CREATE TABLE cash_handovers (
+  id            INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  handover_no   VARCHAR(20)  NOT NULL UNIQUE,
+  handover_date DATE         NOT NULL,
+  user_id       INT UNSIGNED NOT NULL,
+  amount        DECIMAL(14,2) NOT NULL,
+  remarks       VARCHAR(255) NOT NULL DEFAULT '',
+  created_by    INT UNSIGNED NULL,
+  created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_cash_handovers_user_date (user_id, handover_date),
+  CONSTRAINT fk_cash_handovers_user    FOREIGN KEY (user_id)    REFERENCES users(id),
+  CONSTRAINT fk_cash_handovers_creator FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE staff_locations (
+  user_id     INT UNSIGNED PRIMARY KEY,
+  latitude    DECIMAL(10,7) NOT NULL,
+  longitude   DECIMAL(10,7) NOT NULL,
+  accuracy    INT UNSIGNED NULL,
+  updated_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_staff_locations_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
 CREATE TABLE withdrawals (
   id               INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   withdrawal_code  VARCHAR(20) NOT NULL UNIQUE,
@@ -441,6 +498,83 @@ CREATE TABLE day_end_closings (
 -- ---------------------------------------------------------------------------
 -- System
 -- ---------------------------------------------------------------------------
+
+-- Chit settlement (payout): staff / agent request -> Super Admin approval -> Admin payout.
+CREATE TABLE chit_settlements (
+  id               INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  settlement_no    VARCHAR(20)   NOT NULL UNIQUE,
+  customer_id      INT UNSIGNED  NOT NULL,
+  group_id         INT UNSIGNED  NOT NULL,
+  amount           DECIMAL(14,2) NOT NULL,
+  status           ENUM('requested','approved','rejected','paid') NOT NULL DEFAULT 'requested',
+  request_note     VARCHAR(255)  NOT NULL DEFAULT '',
+  requested_by     INT UNSIGNED  NULL,
+  requested_at     DATETIME      NOT NULL,
+  decision_note    VARCHAR(255)  NOT NULL DEFAULT '',
+  decided_by       INT UNSIGNED  NULL,
+  decided_at       DATETIME      NULL,
+  payout_mode      ENUM('cash','bank_transfer','cheque') NULL,
+  bank_account_id  INT UNSIGNED  NULL,
+  payout_reference VARCHAR(60)   NOT NULL DEFAULT '',
+  paid_date        DATE          NULL,
+  paid_by          INT UNSIGNED  NULL,
+  KEY idx_chit_settlements_customer (customer_id, group_id),
+  KEY idx_chit_settlements_status (status),
+  CONSTRAINT fk_settlements_customer  FOREIGN KEY (customer_id)     REFERENCES customers(id),
+  CONSTRAINT fk_settlements_group     FOREIGN KEY (group_id)        REFERENCES chit_groups(id),
+  CONSTRAINT fk_settlements_requester FOREIGN KEY (requested_by)    REFERENCES users(id) ON DELETE SET NULL,
+  CONSTRAINT fk_settlements_decider   FOREIGN KEY (decided_by)      REFERENCES users(id) ON DELETE SET NULL,
+  CONSTRAINT fk_settlements_payer     FOREIGN KEY (paid_by)         REFERENCES users(id) ON DELETE SET NULL,
+  CONSTRAINT fk_settlements_bank      FOREIGN KEY (bank_account_id) REFERENCES bank_accounts(id) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE bid_payments (
+  id                INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  request_no        VARCHAR(20)   NOT NULL UNIQUE,
+  auction_id        INT UNSIGNED  NOT NULL,
+  type              ENUM('request','direct') NOT NULL DEFAULT 'request',
+  status            ENUM('applied','verified','approved','documented','doc_verified','paid','rejected') NOT NULL DEFAULT 'applied',
+  apply_note        VARCHAR(255)  NOT NULL DEFAULT '',
+  applied_by        INT UNSIGNED  NULL,
+  applied_at        DATETIME      NOT NULL,
+  verified_by       INT UNSIGNED  NULL,
+  verified_at       DATETIME      NULL,
+  approved_by       INT UNSIGNED  NULL,
+  approved_at       DATETIME      NULL,
+  documents         VARCHAR(255)  NOT NULL DEFAULT '',
+  document_note     VARCHAR(255)  NOT NULL DEFAULT '',
+  documented_by     INT UNSIGNED  NULL,
+  documented_at     DATETIME      NULL,
+  doc_verified_by   INT UNSIGNED  NULL,
+  doc_verified_at   DATETIME      NULL,
+  reject_note       VARCHAR(255)  NOT NULL DEFAULT '',
+  rejected_stage    VARCHAR(20)   NOT NULL DEFAULT '',
+  rejected_by       INT UNSIGNED  NULL,
+  rejected_at       DATETIME      NULL,
+  payout_mode       ENUM('cash','bank_transfer','cheque') NULL,
+  bank_account_id   INT UNSIGNED  NULL,
+  payout_reference  VARCHAR(60)   NOT NULL DEFAULT '',
+  paid_date         DATE          NULL,
+  paid_by           INT UNSIGNED  NULL,
+  KEY idx_bid_payments_auction (auction_id),
+  KEY idx_bid_payments_status (status),
+  CONSTRAINT fk_bid_payments_auction FOREIGN KEY (auction_id)      REFERENCES auctions(id),
+  CONSTRAINT fk_bid_payments_bank    FOREIGN KEY (bank_account_id) REFERENCES bank_accounts(id) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE bid_payment_files (
+  id              INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  bid_payment_id  INT UNSIGNED  NOT NULL,
+  document        VARCHAR(60)   NOT NULL,
+  file_name       VARCHAR(160)  NOT NULL,
+  stored_name     VARCHAR(60)   NOT NULL,
+  mime            VARCHAR(40)   NOT NULL,
+  size_bytes      INT UNSIGNED  NOT NULL,
+  uploaded_by     INT UNSIGNED  NULL,
+  uploaded_at     DATETIME      NOT NULL,
+  KEY idx_bid_payment_files_payment (bid_payment_id),
+  CONSTRAINT fk_bid_files_payment FOREIGN KEY (bid_payment_id) REFERENCES bid_payments(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
 
 CREATE TABLE notifications (
   id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,

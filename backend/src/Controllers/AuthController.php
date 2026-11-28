@@ -16,15 +16,24 @@ final class AuthController
     /** bcrypt hash of a random string nobody knows; only used to equalise timing. */
     private const DUMMY_HASH = '$2y$10$EGlii8zNbkWeUUiV64iiouYPKRXqKUUD66JdgbCFtP6G5zaRO.2w2';
 
+    /**
+     * One sign-in form for everyone. "email" holds an email, or the Super Admin Login ID.
+     * The MD (by email or Login ID) gets a Super Admin session; everyone else the Admin
+     * panel or, for collection staff and agents, the collection app.
+     */
     public static function login(Request $req): array
     {
         $in = $req->input();
-        $email = $in->email('email');
+        $email = mb_strtolower(trim($in->str('email', true, 160)));
         $password = $in->str('password', true);
         if (mb_strlen($password) > 128) {
             $in->error('password', 'Invalid email or password');
         }
         $in->validate();
+
+        if (SuperAdminController::isLoginId($email)) {
+            return SuperAdminController::attempt($email, $password);
+        }
 
         LoginThrottle::assertAllowed($email);
 
@@ -46,9 +55,11 @@ final class AuthController
             throw new HttpException(403, 'This account is inactive. Contact your administrator.');
         }
 
+        // The main app is the Admin panel; the Managing Director's panel is the Super Admin Panel.
+        $superAdmin = $row['role'] === 'md';
         $token = Auth::issueToken((int) $row['id']);
-        Audit::login($row, $email, 'Login');
-        return ['token' => $token, 'user' => User::find((int) $row['id'])];
+        Audit::login($row, $email, $superAdmin ? 'Super Admin Login' : 'Login');
+        return ['token' => $token, 'user' => User::find((int) $row['id']), 'superAdmin' => $superAdmin];
     }
 
     public static function logout(Request $req): array

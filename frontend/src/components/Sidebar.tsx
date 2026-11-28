@@ -3,13 +3,13 @@ import { useEffect, useState } from 'react';
 import {
   LayoutDashboard, Users, Building2, UserCircle, UsersRound,
   Landmark, Clock, FileText, Bell, Settings,
-  ChevronDown, ChevronRight, FileSpreadsheet, Receipt,
+  ChevronDown, ChevronRight, FileSpreadsheet,
   CreditCard, ClipboardList, BarChart3, ScrollText, CheckCircle2,
-  UserPlus, List, ArrowRightLeft, CalendarDays, HandCoins, FileBarChart,
-  Coins, Building, Landmark as LandmarkIcon, ArrowDownToLine,
+  UserPlus, List, ArrowRightLeft, CalendarDays, FileBarChart,
+  Coins, Building, Landmark as LandmarkIcon,
   AlertCircle, UserCheck, CalendarClock, CalendarPlus, MapPin, Handshake,
-  Gavel, BadgePercent, Wrench, LogIn, Search, IdCard, Database,
-  PanelLeftClose, Hash, X,
+  Gavel, BadgePercent, Wrench, LogIn,
+  PanelLeftClose, Hash, X, ReceiptText, Wallet,
 } from 'lucide-react';
 import { useIsDesktop } from '@/hooks/useMediaQuery';
 import { useApp } from '@/context/AppContext';
@@ -36,6 +36,7 @@ const OFFICE: Role[] = ['md', 'admin', 'manager'];
 const ADMIN: Role[] = ['md', 'admin'];
 
 const navSections: NavSection[] = [
+  // The Super Admin (MD) panel is not in this menu: the MD lands there after signing in.
   { items: [{ label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard }] },
   {
     title: 'Master Data',
@@ -87,15 +88,17 @@ const navSections: NavSection[] = [
   {
     title: 'Transaction Data',
     items: [
-      { label: 'AR Receipt', path: '/receipts/arrear', icon: HandCoins },
-      { label: 'Chit Receipt', path: '/receipts/chit', icon: Receipt },
-      { label: 'Auction', path: '/auctions', icon: Gavel, roles: OFFICE },
+      { label: 'Receipt Entry', path: '/receipts/entry', icon: ReceiptText },
+      { label: 'Expenses', path: '/expenses', icon: Wallet, roles: OFFICE },
+      { label: 'Bid Payments', path: '/auctions', icon: Gavel, roles: OFFICE },
       {
         label: 'Payment', path: '/payments', icon: CreditCard,
         children: [
           { label: 'Payment Entry', path: '/payments/entry', icon: CreditCard },
           { label: 'Voucher Entry', path: '/payments/voucher', icon: ClipboardList },
           { label: 'Payment Approval', path: '/payments/approval', icon: CheckCircle2 },
+          // Payout of chit settlements the Super Admin approved (MD / Admin only).
+          { label: 'Chit Settlement', path: '/payments/settlements', icon: Wallet, roles: ADMIN },
         ],
       },
       {
@@ -109,48 +112,41 @@ const navSections: NavSection[] = [
     ],
   },
   {
-    title: 'System Enquiry',
+    title: 'Reports',
     items: [
-      { label: 'Subscriber Payments', path: '/enquiry/payments', icon: Search },
-      { label: 'Subscriber Profile', path: '/enquiry/profile', icon: IdCard },
-    ],
-  },
-  {
-    title: 'Master Report',
-    items: [
-      { label: 'Master Report', path: '/reports/master', icon: Database, roles: OFFICE },
       { label: 'All Reports', path: '/reports', icon: BarChart3 },
       {
+        // Same order as the pending report filters: Staff → Batch (group) → Branch.
         label: 'Pending', path: '/pending', icon: Clock,
         children: [
           { label: 'Customer Pending', path: '/pending/customer', icon: AlertCircle },
           { label: 'Staff-wise Pending', path: '/pending/staff', icon: UserCircle },
+          { label: 'Batch-wise Pending', path: '/pending/group', icon: UsersRound },
           { label: 'Branch-wise Pending', path: '/pending/branch', icon: Building },
-          { label: 'Group-wise Pending', path: '/pending/group', icon: UsersRound },
         ],
       },
-      { label: 'Statements', path: '/statements', icon: FileSpreadsheet },
+      { label: 'Statement (Passbook)', path: '/statements', icon: FileSpreadsheet },
     ],
   },
   {
+    // Admin panel: company cash/bank books, day end and the audit trail are MD / Admin only.
     title: 'Account Data',
     items: [
       {
-        label: 'Cash & Bank', path: '/cash-bank', icon: Landmark, roles: OFFICE,
+        label: 'Cash & Bank', path: '/cash-bank', icon: Landmark, roles: ADMIN,
         children: [
           { label: 'Cash Statement', path: '/cash-bank/cash', icon: Coins },
           { label: 'Bank Accounts', path: '/cash-bank/accounts', icon: LandmarkIcon },
           { label: 'Bank Statement', path: '/cash-bank/statement', icon: FileText },
-          { label: 'Withdrawal', path: '/cash-bank/withdrawal', icon: ArrowDownToLine },
         ],
       },
-      { label: 'Day End', path: '/day-end', icon: CalendarClock, roles: OFFICE },
+      { label: 'Day End', path: '/day-end', icon: CalendarClock, roles: ADMIN },
     ],
   },
   {
     title: 'Auditing Data',
     items: [
-      { label: 'Audit Log', path: '/audit', icon: ScrollText, roles: OFFICE },
+      { label: 'Audit Log', path: '/audit', icon: ScrollText, roles: ADMIN },
       { label: 'Notifications', path: '/notifications', icon: Bell },
     ],
   },

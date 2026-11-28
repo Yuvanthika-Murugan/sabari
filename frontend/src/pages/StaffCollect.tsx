@@ -7,12 +7,19 @@ import { printThermalReceipt } from '@/lib/thermalPrint';
 import { useApp } from '@/context/AppContext';
 import { useData } from '@/context/DataContext';
 import { useForm } from '@/hooks/useForm';
+import { useMyCustomers } from '@/hooks/useMyCustomers';
 import { api } from '@/lib/api';
 import { formatCurrency, nowTime } from '@/lib/format';
 import type { Collection, Customer } from '@/types';
-import { Banknote, QrCode, Search, Receipt, Printer, Plus, CheckCircle2, AlertCircle } from 'lucide-react';
+import StaffDebit from '@/components/StaffDebit';
+import { MyDaySummary } from '@/components/MyDay';
+import { MyRouteToday } from '@/components/MyRouteToday';
+import { currentPosition, useLocationHeartbeat } from '@/lib/geo';
+import { Banknote, QrCode, Search, Receipt, Printer, Plus, CheckCircle2, AlertCircle, ShieldCheck } from 'lucide-react';
 
-const blank = { amount: '', paymentMode: 'cash', referenceNo: '', customerId: '', receiptType: 'chit' };
+const blank = { amount: '', paymentMode: 'cash', referenceNo: '', customerId: '' };
+/** Notes and coins for the denomination count (must match CollectionController::NOTES). */
+const NOTES = [2000, 500, 200, 100, 50, 20, 10, 5, 2, 1];
 
 /**
  * Collection staff's payment screen: amount (with a UPI QR for that amount),
@@ -26,12 +33,14 @@ export default function StaffCollect() {
   const v = form.values;
   const [search, setSearch] = useState('');
   const [receipt, setReceipt] = useState<ReceiptData | null>(null);
+  // While this screen is open, the phone reports its position for the office's live map.
+  useLocationHeartbeat();
 
   const amount = Number(v.amount) || 0;
   const isUpi = v.paymentMode === 'upi';
 
-  // Customers with something left to pay; the staff member's own route first.
-  const mine = (c: Customer) => c.staffId === currentUser?.id;
+  // Customers with something left to pay; the staff member's (or agent's) own customers first.
+  const { isMine: mine } = useMyCustomers();
   const q = search.trim().toLowerCase();
   const payable = customers
     .filter(c => c.status !== 'closed' && c.pending > 0)
@@ -43,23 +52,36 @@ export default function StaffCollect() {
   const dues = customer ? dueSchedules.filter(d => d.customerId === customer.id && d.pendingAmount > 0) : [];
   const overdue = dues.filter(d => d.dueDate < today);
   const arrears = overdue.reduce((s, d) => s + d.pendingAmount, 0);
-  const isAr = v.receiptType === 'arrear';
-  const limit = customer ? (isAr ? arrears : customer.pending) : 0;
+  // Automatic group validation: a customer with overdue dues is an AR customer. An amount
+  // within the arrears is an AR receipt; anything more is a chit receipt (which still
+  // clears the oldest dues first). No manual choice.
+  const isAr = !!customer && arrears > 0 && amount <= arrears + 0.001;
+  const limit = customer ? customer.pending : 0;
   const firstDue = (isAr ? overdue : dues)[0];
   const groupName = (id: string) => groups.find(g => g.id === id)?.groupName ?? '-';
 
   const pickCustomer = (c: Customer) => {
     form.set('customerId', c.id);
-    // An AR customer is collected as an AR receipt by default.
-    const hasArrears = dueSchedules.some(d => d.customerId === c.id && d.pendingAmount > 0 && d.dueDate < today);
-    form.set('receiptType', hasArrears ? 'arrear' : 'chit');
     setSearch('');
   };
 
+  // Cash denominations counted.
+  const [notes, setNotes] = useState<Record<number, string>>({});
+  const counted = NOTES.reduce((s, n) => s + n * (Number(notes[n]) || 0), 0);
+  const denominations = NOTES.filter(n => Number(notes[n]) > 0).map(n => `${n}x${Number(notes[n])}`).join(',');
+  const setNote = (n: number, count: string) => {
+    const next = { ...notes, [n]: count.replace(/\D/g, '').slice(0, 4) };
+    setNotes(next);
+    // Counting the notes fills in the amount.
+    const total = NOTES.reduce((s, x) => s + x * (Number(next[x]) || 0), 0);
+    form.set('amount', total ? String(total) : '');
+  };
+  const isCash = v.paymentMode === 'cash';
+
   const problem = !amount ? 'Enter the amount'
     : !customer ? 'Select the customer'
-    : isAr && arrears <= 0 ? 'This customer has no arrears — choose Chit Group Customer'
-    : amount > limit + 0.001 ? `Amount is more than the ${isAr ? 'arrears' : 'balance'} of ${formatCurrency(limit)}`
+    : amount > limit + 0.001 ? `Amount is more than the balance of ${formatCurrency(limit)}`
+    : isCash && counted > 0 && Math.abs(counted - amount) > 0.001 ? `Notes counted (${formatCurrency(counted)}) do not match the amount`
     : isUpi && !v.referenceNo.trim() ? 'Enter the UPI reference number after the customer pays'
     : '';
 
@@ -67,10 +89,12 @@ export default function StaffCollect() {
     if (problem || !customer) return;
     const time = nowTime();
     let receiptNo = '';
+    const point = await currentPosition();
     const ok = await form.submit(async values => {
       const res = await api.post<{ receiptNo: string }>('/collections', {
-        customerId: values.customerId, receiptType: values.receiptType, amount: values.amount,
+        customerId: values.customerId, receiptType: isAr ? 'arrear' : 'chit', amount: values.amount,
         paymentMode: values.paymentMode, referenceNo: values.referenceNo, date: today, time,
+        denominations: isCash ? denominations : '', ...(point ?? {}),
       });
       receiptNo = res.receiptNo;
       return res;
@@ -81,22 +105,22 @@ export default function StaffCollect() {
       customerName: customer.name, customerCode: customer.customerId, mobile: customer.mobile,
       groupName: groupName(customer.groupId), dueNumber: firstDue?.dueNumber ?? null,
       amount, paymentMode: v.paymentMode, referenceNo: v.referenceNo.trim(),
+      denominations: isCash ? denominations : '',
       balance: Math.max(0, customer.pending - amount),
       staffName: currentUser?.name ?? '', companyAddress: settings.companyAddress,
     });
   };
 
-  const startNew = () => { form.reset(blank); setReceipt(null); setSearch(''); };
+  const startNew = () => { form.reset(blank); setReceipt(null); setSearch(''); setNotes({}); };
 
   // Reprint one of today's receipts by this staff member.
-  const myToday = collections.filter(c => c.date === today && c.staffId === currentUser?.id);
   const reprint = (c: Collection) => {
     const cust = customers.find(x => x.id === c.customerId);
     setReceipt({
       receiptNo: c.receiptNo, type: c.receiptType, date: c.date, time: c.time,
       customerName: c.customerName, customerCode: cust?.customerId ?? '', mobile: cust?.mobile ?? '',
       groupName: c.groupName, dueNumber: c.dueNumber || null, amount: c.collectedAmount,
-      paymentMode: c.paymentMode, referenceNo: c.referenceNo, balance: cust?.pending ?? 0,
+      paymentMode: c.paymentMode, referenceNo: c.referenceNo, denominations: c.denominations, balance: cust?.pending ?? 0,
       staffName: c.staffName, companyAddress: settings.companyAddress,
     });
   };
@@ -128,8 +152,20 @@ export default function StaffCollect() {
     );
   }
 
+  // Phone: one column, My Day first. Laptop: the collection steps on the left, and
+  // My Day, Debit and today's route in a column on the right.
   return (
-    <div className="max-w-md mx-auto space-y-4 animate-fade-in">
+    <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_380px] gap-4 lg:gap-6 items-start animate-fade-in">
+      <aside className="space-y-4 lg:order-2">
+        {/* Today so far: collected, handed over, debits and cash in hand. */}
+        <MyDaySummary />
+        <div className="hidden lg:block space-y-4">
+          <StaffDebit />
+          <MyRouteToday onReprint={reprint} />
+        </div>
+      </aside>
+
+      <div className="space-y-4 lg:order-1 min-w-0">
       {/* 1. Amount, with the UPI QR for it */}
       <section className={card}>
         {step(1, 'Amount')}
@@ -142,19 +178,41 @@ export default function StaffCollect() {
             </button>
           ))}
         </div>
+        {isCash && (
+          <div className="mt-4">
+            <p className="text-xs font-medium text-gray-600 mb-2">Denomination (notes received)</p>
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+              {NOTES.filter(n => n >= 10).map(n => (
+                <label key={n} className="flex items-stretch rounded-lg border border-gray-200 overflow-hidden focus-within:ring-2 focus-within:ring-primary-500 focus-within:border-transparent">
+                  <span className="flex items-center justify-center w-14 flex-shrink-0 bg-gray-50 border-r border-gray-200 text-xs font-semibold text-gray-700 tabular-nums">₹{n}</span>
+                  <input inputMode="numeric" value={notes[n] ?? ''} onChange={e => setNote(n, e.target.value)} placeholder="0"
+                    className="w-full min-w-0 px-2 py-2 text-sm text-center tabular-nums outline-none" aria-label={`Number of ${n} rupee notes`} />
+                </label>
+              ))}
+            </div>
+            {counted > 0 && (
+              <p className={`text-xs mt-2 ${Math.abs(counted - amount) > 0.001 ? 'text-danger-600' : 'text-success-700'}`}>
+                Counted {formatCurrency(counted)}{Math.abs(counted - amount) > 0.001 ? ` — amount is ${formatCurrency(amount)}` : ' ✓'}
+              </p>
+            )}
+          </div>
+        )}
         {isUpi && (
           <div className="mt-4 flex flex-col items-center gap-2">
             {!settings.upiId ? (
               <p className="flex gap-2 text-sm text-warning-800 bg-warning-50 border border-warning-200 rounded-lg p-3">
                 <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" /> The company UPI ID is not set. Ask the office to add it in Company Profile.
               </p>
-            ) : amount > 0 ? (
+            ) : (
+              // Always shown: with the amount filled in once it is typed, otherwise the payer enters it.
               <>
                 <UpiQr text={upiLink(settings.upiId, settings.upiPayeeName, amount, customer ? `${customer.customerId} ${isAr ? 'AR' : 'chit'}` : 'Chit collection')} size={220} />
-                <p className="text-sm text-gray-700">Scan to pay <span className="font-bold">{formatCurrency(amount)}</span></p>
+                {amount > 0
+                  ? <p className="text-sm text-gray-700">Scan to pay <span className="font-bold">{formatCurrency(amount)}</span></p>
+                  : <p className="text-sm text-gray-700">Scan to pay · <span className="text-gray-500">customer enters the amount (type it above to fix it in the QR)</span></p>}
                 <p className="text-xs text-gray-500">{settings.upiPayeeName || settings.upiId} · {settings.upiId}</p>
               </>
-            ) : <p className="text-sm text-gray-500">Enter the amount to show the QR.</p>}
+            )}
             <Input label="UPI Reference No (after payment)" format="reference" maxLength={60} {...form.field('referenceNo')} placeholder="12-digit UTR from the customer's app" className="w-full" required />
           </div>
         )}
@@ -196,21 +254,20 @@ export default function StaffCollect() {
         )}
       </section>
 
-      {/* 3. AR or chit group customer */}
+      {/* 3. Checked automatically: chit group customer or AR customer */}
       <section className={card}>
-        {step(3, 'Receipt Type')}
-        <div className="grid grid-cols-2 gap-2">
-          {([['chit', 'Chit Group Customer'], ['arrear', 'AR Customer']] as const).map(([type, label]) => (
-            <button key={type} type="button" onClick={() => form.set('receiptType', type)}
-              disabled={type === 'arrear' && !!customer && arrears <= 0}
-              className={`py-2.5 rounded-lg border text-sm font-medium disabled:opacity-40 ${v.receiptType === type ? 'bg-primary-600 border-primary-600 text-white' : 'bg-white border-gray-200 text-gray-700'}`}>
-              {label}
-            </button>
-          ))}
-        </div>
-        {customer && <p className="text-xs text-gray-500 mt-2">{isAr
-          ? `AR receipt: pays overdue instalments only (up to ${formatCurrency(arrears)}).`
-          : `Chit receipt: pays the next instalment${firstDue ? ` (#${firstDue.dueNumber}, ${formatCurrency(firstDue.pendingAmount)})` : ''} first.`}</p>}
+        {step(3, 'Group Check (automatic)')}
+        {!customer ? <p className="text-sm text-gray-400">Select the customer to check.</p> : (
+          <div className={`flex items-start gap-3 rounded-lg p-3 border ${arrears > 0 ? 'bg-danger-50 border-danger-200' : 'bg-success-50 border-success-200'}`}>
+            {arrears > 0 ? <AlertCircle className="w-5 h-5 text-danger-600 flex-shrink-0" /> : <ShieldCheck className="w-5 h-5 text-success-600 flex-shrink-0" />}
+            <div className="text-sm">
+              <p className="font-semibold text-gray-900">{arrears > 0 ? 'AR Customer' : 'Chit Group Customer'} · {groupName(customer.groupId)}</p>
+              <p className="text-xs text-gray-600 mt-0.5">{arrears > 0
+                ? `${overdue.length} overdue instalment${overdue.length === 1 ? '' : 's'} · ${formatCurrency(arrears)} arrears. ${amount > 0 ? (isAr ? 'This is an AR receipt.' : 'Amount covers the arrears and more — saved as a chit receipt.') : ''}`
+                : `No arrears. Pays the next instalment${firstDue ? ` (#${firstDue.dueNumber}, ${formatCurrency(firstDue.pendingAmount)})` : ''} first.`}</p>
+            </div>
+          </div>
+        )}
       </section>
 
       {/* 4. Generate */}
@@ -221,24 +278,15 @@ export default function StaffCollect() {
         </button>
         {problem && <p className="text-xs text-gray-500 text-center mt-2">{problem}</p>}
         {form.errors.amount && <p className="text-xs text-danger-600 text-center mt-1">{form.errors.amount}</p>}
+        {form.errors.denominations && <p className="text-xs text-danger-600 text-center mt-1">{form.errors.denominations}</p>}
       </div>
 
-      {myToday.length > 0 && (
-        <section className={card}>
-          <h2 className="text-sm font-semibold text-gray-900 mb-2">My receipts today ({formatCurrency(myToday.reduce((s, c) => s + c.collectedAmount, 0))})</h2>
-          <ul className="divide-y divide-gray-100">
-            {myToday.map(c => (
-              <li key={c.id} className="flex items-center justify-between py-2 gap-2">
-                <div className="min-w-0">
-                  <p className="text-sm text-gray-900 truncate">{c.customerName}</p>
-                  <p className="text-xs text-gray-500">{c.receiptNo} · {c.time.slice(0, 5)} · {formatCurrency(c.collectedAmount)}</p>
-                </div>
-                <button onClick={() => reprint(c)} className="flex items-center gap-1 text-xs text-primary-600 font-medium"><Printer className="w-3.5 h-3.5" /> Reprint</button>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+      {/* Phone only (on laptops these sit in the right column): debit and today's route. */}
+      <div className="lg:hidden space-y-4">
+        <StaffDebit />
+        <MyRouteToday onReprint={reprint} />
+      </div>
+      </div>
     </div>
   );
 }

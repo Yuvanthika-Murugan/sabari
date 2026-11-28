@@ -18,7 +18,8 @@ import { Receipt, Wallet, AlertCircle, HandCoins, CalendarDays, Ban } from 'luci
 function ReceiptRegister({ type }: { type: 'chit' | 'arrear' }) {
   const { collections, cancelledReceipts, dueSchedules, today } = useData();
   const { currentUser } = useApp();
-  const canCancel = currentUser?.role === 'md' || currentUser?.role === 'admin';
+  // No Cancel button on Chit Receipt; AR Receipt keeps it for MD / Admin.
+  const canCancel = type === 'arrear' && (currentUser?.role === 'md' || currentUser?.role === 'admin');
   const [showForm, setShowForm] = useState(false);
   const [cancelling, setCancelling] = useState<Collection | null>(null);
   const cancelForm = useForm({ reason: '' });

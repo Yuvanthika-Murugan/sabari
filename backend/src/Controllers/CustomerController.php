@@ -30,6 +30,34 @@ final class CustomerController
         return DueSchedule::forCustomer($id);
     }
 
+    /**
+     * Saves where the customer is (their house / shop) from the phone's GPS, so the
+     * route map can pin them. Office users, and the collection staff / agent of that
+     * customer, may set it; "clear": true removes it.
+     */
+    public static function location(Request $req, int $id): array
+    {
+        Auth::requireRole('md', 'admin', 'manager', 'staff');
+        $customer = Customer::find($id);
+        if (Auth::is('staff')) {
+            $mine = (int) $customer['staffId'] === Auth::id()
+                || ($customer['agentId'] !== '' && (int) DB::value('SELECT user_id FROM agents WHERE id = ?', [(int) $customer['agentId']]) === Auth::id());
+            if (!$mine) {
+                throw new HttpException(403, 'You can set the location only for your own customers');
+            }
+        }
+        if (!empty($req->body['clear'])) {
+            DB::exec('UPDATE customers SET latitude = NULL, longitude = NULL WHERE id = ?', [$id]);
+            Audit::log('Customer Location Cleared', 'Customers', $customer['customerId']);
+            return Customer::find($id);
+        }
+        $point = LocationController::point($req->body)
+            ?? throw HttpException::unprocessable('Location not available. Turn on the phone\'s location and try again.');
+        DB::exec('UPDATE customers SET latitude = ?, longitude = ? WHERE id = ?', [$point[0], $point[1], $id]);
+        Audit::log('Customer Location Set', 'Customers', $customer['customerId'], '-', "{$point[0]},{$point[1]}");
+        return Customer::find($id);
+    }
+
     public static function transfers(Request $req): array
     {
         return CustomerTransfer::all();
@@ -217,6 +245,9 @@ final class CustomerController
             'intimationType' => fn () => ['intimation_type', $in->enum('intimationType', ['post', 'hand', 'courier'], 'post')],
             'intimationCard' => fn () => ['intimation_card', self::flag($in, 'intimationCard')],
             'collectionType' => fn () => ['collection_type', $in->enum('collectionType', ['monthly', 'bimonthly', 'weekly', 'daily'], 'monthly')],
+            // Map location of the customer's house / shop ('' clears it).
+            'latitude' => fn () => ['latitude', self::coord($in, 'latitude', 90)],
+            'longitude' => fn () => ['longitude', self::coord($in, 'longitude', 180)],
         ];
         $data = [];
         foreach ($fields as $key => $read) {
@@ -226,6 +257,20 @@ final class CustomerController
             }
         }
         return $data;
+    }
+
+    /** A latitude / longitude within ±$limit (null when empty). */
+    private static function coord(Input $in, string $key, int $limit): ?float
+    {
+        $value = $in->str($key, false, 20);
+        if ($value === '') {
+            return null;
+        }
+        if (!is_numeric($value) || abs((float) $value) > $limit) {
+            $in->error($key, 'Must be a number between -' . $limit . ' and ' . $limit);
+            return null;
+        }
+        return round((float) $value, 7);
     }
 
     /** A yes/no field sent as "1"/"0", "true"/"false" or a boolean. */

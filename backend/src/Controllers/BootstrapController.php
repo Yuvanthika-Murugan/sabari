@@ -20,6 +20,7 @@ use App\Models\CustomerTransfer;
 use App\Models\DashboardReport;
 use App\Models\DayEndClosing;
 use App\Models\DueSchedule;
+use App\Models\StaffLocation;
 use App\Models\Notification;
 use App\Models\Payment;
 use App\Models\Setting;
@@ -46,15 +47,20 @@ final class BootstrapController
             'collections' => Collection::valid(),
             'cancelledReceipts' => Collection::cancelled(),
             'auctions' => Auction::all(),
+            'bidPayments' => BidPaymentController::visible(),
             'paymentApprovals' => Visibility::payments(Payment::all()),
             'vouchers' => Visibility::officeOnly(Voucher::all()),
+            'expenses' => ExpenseController::visible(),
+            'cashHandovers' => HandoverController::visible(),
+            'settlements' => SettlementController::visible(),
+            'staffLocations' => Visibility::officeOnly(StaffLocation::all()),
             'withdrawals' => Visibility::officeOnly(Withdrawal::all()),
             'bankAccounts' => Visibility::bankAccounts(BankAccount::all()),
-            'bankTransactions' => Visibility::officeOnly(BankTransaction::all()),
-            'cashTransactions' => Visibility::officeOnly(CashTransaction::all()),
+            'bankTransactions' => Visibility::adminOnly(BankTransaction::all()),
+            'cashTransactions' => Visibility::adminOnly(CashTransaction::all()),
             'notifications' => Notification::all(),
             'auditLogs' => AuditController::rows(),
-            'dayEndClosings' => Visibility::officeOnly(DayEndClosing::all()),
+            'dayEndClosings' => Visibility::adminOnly(DayEndClosing::all()),
             'dashboard' => Visibility::dashboard(DashboardReport::data()),
             'settings' => Setting::company(),
             'commission' => Setting::commission(),

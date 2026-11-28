@@ -107,7 +107,7 @@ export function ArrearSubscribers() {
       <Dropdown label="Actions" items={[
         { label: 'View details', onClick: () => setViewId(r.id), icon: <Eye className="w-3.5 h-3.5" /> },
         { label: 'Profile', onClick: () => navigate('/enquiry/profile', { state: { customerId: r.id } }), icon: <UserRound className="w-3.5 h-3.5" /> },
-        ...(r.arrears > 0 ? [{ label: 'Collect arrears', onClick: () => navigate('/receipts/arrear'), icon: <HandCoins className="w-3.5 h-3.5" /> }] : []),
+        ...(r.arrears > 0 ? [{ label: 'Collect arrears', onClick: () => navigate('/receipts/entry'), icon: <HandCoins className="w-3.5 h-3.5" /> }] : []),
         ...(canAdd && r.status !== 'closed' ? [{ label: 'Transfer to chit group', onClick: () => setTransferFor(r.id), icon: <ArrowRightLeft className="w-3.5 h-3.5" /> }] : []),
       ]} />
     )},

@@ -5,8 +5,8 @@ import { frequencyOptions } from '@/lib/options';
 import { PageHeader, StatusBadge, ExportButtons } from '@/components/PageHeader';
 import DataTable from '@/components/DataTable';
 import Modal, { ModalFooter } from '@/components/Modal';
-import KPICard from '@/components/KPICard';
 import { Input, Select, FilterBar, DateRangeFilter } from '@/components/FormControls';
+import { DateFilterPanel, SearchSelect } from '@/components/SmartFilters';
 import { inDateRange } from '@/lib/format';
 import { useData } from '@/context/DataContext';
 import { useApp } from '@/context/AppContext';
@@ -14,7 +14,8 @@ import { useForm, useAction } from '@/hooks/useForm';
 import { api } from '@/lib/api';
 import { formatCurrency } from '@/lib/format';
 import type { Customer, Group } from '@/types';
-import { CalendarPlus, Eye, Edit, Trash2, Printer, Users, Wallet, TrendingUp, Calendar } from 'lucide-react';
+import GroupDetails from '@/components/GroupDetails';
+import { CalendarPlus, Eye, Edit, Trash2, Printer, X } from 'lucide-react';
 
 const emptyGroup = {
   branchId: '', groupCodeId: '', groupName: '', psoNumber: '', psoDate: '', agreementNo: '', agreementDate: '',
@@ -63,8 +64,14 @@ export function GroupList() {
   const [durationFilter, setDurationFilter] = useState('');
   const [frequencyFilter, setFrequencyFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [nameFilter, setNameFilter] = useState('');
+  const [customerFilter, setCustomerFilter] = useState('');
+  const customerGroupId = customers.find(c => c.id === customerFilter)?.groupId;
+  const enrolled = (g: Group) => customers.filter(c => c.groupId === g.id && c.status !== 'closed').length;
   const filteredGroups = groups.filter(g =>
     inDateRange(g.startDate, fromDate, toDate) &&
+    (!nameFilter || g.id === nameFilter) &&
+    (!customerFilter || g.id === customerGroupId) &&
     (!branchFilter || g.branchId === branchFilter) &&
     (!valueFilter || String(g.groupValue) === valueFilter) &&
     (!seriesFilter || g.series === seriesFilter) &&
@@ -78,9 +85,9 @@ export function GroupList() {
   const [showDelete, setShowDelete] = useState<Group | null>(null);
 
   const viewGroup = groups.find(g => g.id === showView);
-  const groupCustomers = viewGroup ? customers.filter(c => c.groupId === viewGroup.id) : [];
+  // The group chosen in the Group Name filter, or else the group of the chosen customer.
+  const pickedGroup = groups.find(g => g.id === (nameFilter || customerGroupId));
   const nextCode = `GRP${String(groups.reduce((m, g) => Math.max(m, Number(g.groupCode.slice(3)) || 0), 0) + 1).padStart(3, '0')}`;
-  const progress = viewGroup && viewGroup.groupValue ? Math.min(100, Math.round((viewGroup.collected / viewGroup.groupValue) * 100)) : 0;
 
   const newGroup = { ...emptyGroup, startDate: today, companyCommPct: String(commission.foremanCommissionPct) };
   const openForm = (g: Group | 'new') => {
@@ -135,7 +142,7 @@ export function GroupList() {
     { key: 'startDate', label: 'Start', sortable: true },
     { key: 'endDate', label: 'End', sortable: true },
     { key: 'groupValue', label: 'Group Value', sortable: true, render: (g: Group) => formatCurrency(g.groupValue) },
-    { key: 'numberOfMembers', label: 'Members', sortable: true },
+    { key: 'numberOfMembers', label: 'Members', sortable: true, render: (g: Group) => <span title="Enrolled / total seats">{enrolled(g)} / {g.numberOfMembers}</span> },
     { key: 'collected', label: 'Collected', sortable: true, render: (g: Group) => <span className="text-success-600 font-medium">{formatCurrency(g.collected)}</span> },
     { key: 'pending', label: 'Pending', sortable: true, render: (g: Group) => <span className="text-danger-600 font-medium">{formatCurrency(g.pending)}</span> },
     { key: 'status', label: 'Status', render: (g: Group) => <StatusBadge status={g.status} /> },
@@ -157,8 +164,14 @@ export function GroupList() {
           {canManage && <button onClick={() => openForm('new')} className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700 shadow-md"><CalendarPlus className="w-4 h-4" /> Create Group</button>}
         </>
       } />
+      <DateFilterPanel label="Group Start Date" from={fromDate} to={toDate} onChange={(f, t) => { setFromDate(f); setToDate(t); }} today={today}>
+        <span>{filteredGroups.length} groups · <span className="font-semibold text-gray-900">{formatCurrency(filteredGroups.reduce((s, g) => s + g.groupValue, 0))}</span></span>
+      </DateFilterPanel>
       <FilterBar>
-        <DateRangeFilter label="Start" from={fromDate} to={toDate} onFrom={setFromDate} onTo={setToDate} />
+        <SearchSelect label="Group Name" value={nameFilter} onChange={setNameFilter} placeholder="All groups" className="sm:w-56"
+          options={groups.map(g => ({ value: g.id, label: g.groupName, hint: g.groupCode }))} />
+        <SearchSelect label="Customer" value={customerFilter} onChange={setCustomerFilter} placeholder="Any customer" className="sm:w-56"
+          options={customers.map(c => ({ value: c.id, label: c.name, hint: c.customerId, keywords: c.mobile }))} />
         <Select label="Branch" value={branchFilter} onChange={setBranchFilter} options={branches.map(b => ({ value: b.id, label: b.name }))} placeholder="All Branches" />
         <Select label="Group Value" value={valueFilter} onChange={setValueFilter} placeholder="All Values"
           options={distinct(groups.map(g => g.groupValue)).map(x => ({ value: String(x), label: formatCurrency(x) }))} />
@@ -170,50 +183,25 @@ export function GroupList() {
         <Select label="Status" value={statusFilter} onChange={setStatusFilter} placeholder="All Status"
           options={[{ value: 'active', label: 'Active' }, { value: 'inactive', label: 'Inactive' }, { value: 'completed', label: 'Completed' }]} />
       </FilterBar>
-      <DataTable columns={columns} data={filteredGroups} searchKeys={['groupName', 'groupCode']} pageSize={10} emptyMessage="No groups match these filters" />
 
-      <Modal isOpen={!!showView} onClose={() => setShowView(null)} title="Group Details" size="xl">
-        {viewGroup && (
-          <div className="space-y-4">
-            <div className="flex items-center gap-4 pb-4 border-b border-gray-100">
-              <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-primary-600 to-primary-800 flex items-center justify-center text-white"><Users className="w-7 h-7" /></div>
-              <div><h3 className="text-xl font-bold text-gray-900">{viewGroup.groupName}</h3><p className="text-sm text-gray-500">{viewGroup.groupCode} • {branches.find(b => b.id === viewGroup.branchId)?.name}</p></div>
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <KPICard title="Total Members" value={`${groupCustomers.length} / ${viewGroup.numberOfMembers}`} icon={<Users className="w-6 h-6" />} color="primary" />
-              <KPICard title="Group Value" value={formatCurrency(viewGroup.groupValue)} icon={<Wallet className="w-6 h-6" />} color="gold" />
-              <KPICard title="Collected" value={formatCurrency(viewGroup.collected)} icon={<TrendingUp className="w-6 h-6" />} color="success" />
-              <KPICard title="Pending" value={formatCurrency(viewGroup.pending)} icon={<Calendar className="w-6 h-6" />} color="warning" />
-            </div>
-            <div className="bg-primary-50 rounded-lg p-4">
-              <div className="flex justify-between items-center mb-2"><span className="text-sm font-medium text-primary-700">Collection Progress</span><span className="text-sm font-bold text-primary-700">{progress}%</span></div>
-              <div className="w-full bg-primary-100 rounded-full h-3"><div className="bg-primary-600 h-3 rounded-full transition-all" style={{ width: `${progress}%` }} /></div>
-            </div>
-            <div>
-              <h4 className="text-sm font-semibold text-gray-900 mb-3">Group Members ({groupCustomers.length})</h4>
-              <div className="overflow-x-auto scrollbar-thin max-h-64">
-                <table className="w-full">
-                  <thead className="bg-gray-50 sticky top-0">
-                    <tr>{['Customer ID', 'Name', 'Phone', 'Status', 'Due', 'Paid', 'Pending'].map(h => <th key={h} className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase">{h}</th>)}</tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {groupCustomers.map(c => (
-                      <tr key={c.id} className="hover:bg-gray-50">
-                        <td className="px-3 py-2 text-xs font-mono text-primary-600">{c.customerId}</td>
-                        <td className="px-3 py-2 text-sm font-medium text-gray-900">{c.name}</td>
-                        <td className="px-3 py-2 text-sm text-gray-500">{c.mobile}</td>
-                        <td className="px-3 py-2"><StatusBadge status={c.status} /></td>
-                        <td className="px-3 py-2 text-sm">{formatCurrency(c.totalDue)}</td>
-                        <td className="px-3 py-2 text-sm text-success-600">{formatCurrency(c.paid)}</td>
-                        <td className="px-3 py-2 text-sm text-danger-600">{formatCurrency(c.pending)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+      {/* A group picked in the filter (or the group of the picked customer): show all its details. */}
+      {pickedGroup && (
+        <div className="bg-white rounded-xl shadow-card border border-primary-100 p-4 sm:p-6 mb-6 animate-fade-in">
+          <div className="flex items-center justify-between gap-2 mb-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-primary-600">Selected group</p>
+            <div className="flex items-center gap-2">
+              {canManage && <button onClick={() => openForm(pickedGroup)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-gray-200 rounded-lg hover:bg-gray-50"><Edit className="w-3.5 h-3.5" /> Edit</button>}
+              <button onClick={() => { setNameFilter(''); setCustomerFilter(''); }} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-gray-200 rounded-lg hover:bg-gray-50"><X className="w-3.5 h-3.5" /> Clear</button>
             </div>
           </div>
-        )}
+          <GroupDetails group={pickedGroup} />
+        </div>
+      )}
+
+      <DataTable columns={columns} data={filteredGroups} searchKeys={['groupName', 'groupCode']} pageSize={10} emptyMessage="No groups match these filters" />
+
+      <Modal isOpen={!!showView} onClose={() => setShowView(null)} title="Group Details" size="2xl">
+        {viewGroup && <GroupDetails group={viewGroup} />}
       </Modal>
 
       <Modal isOpen={!!editing} onClose={() => setEditing(null)} title={editing === 'new' ? 'Chit Group Add' : 'Edit Chit Group'} size="2xl"

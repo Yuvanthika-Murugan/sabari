@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, Eye, EyeOff } from 'lucide-react';
 import { cleanValue, keyboardFor, type Check, type FieldFormat } from '@/lib/validation';
 
 interface SelectProps {
@@ -74,7 +74,10 @@ export function Input({ label, type = 'text', value, onChange, placeholder, requ
   // Browsers' type="number" still accepts e, +, - and (in some) any text, so number
   // fields are rendered as text boxes that only take digits and one decimal point.
   const fmt: FieldFormat | undefined = format ?? (type === 'number' ? 'decimal' : undefined);
-  const inputType = type === 'number' ? 'text' : type;
+  // Password fields get an eye button to show / hide what was typed.
+  const isPassword = type === 'password';
+  const [reveal, setReveal] = useState(false);
+  const inputType = type === 'number' ? 'text' : isPassword && reveal ? 'text' : type;
 
   let hint = '';
   if (value && fmt && (fmt === 'decimal' || fmt === 'integer')) {
@@ -88,17 +91,32 @@ export function Input({ label, type = 'text', value, onChange, placeholder, requ
   return (
     <div className={className}>
       <FieldLabel label={label} required={required} />
-      <input
-        type={inputType}
-        maxLength={maxLength}
-        inputMode={inputMode ?? keyboardFor(fmt)}
-        value={value}
-        onChange={e => onChange(fmt ? cleanValue(fmt, e.target.value) : e.target.value)}
-        onBlur={() => { setTouched(true); if (fmt === 'name' && value !== value.trim()) onChange(value.trim()); }}
-        placeholder={placeholder}
-        disabled={disabled}
-        className={fieldClass(shown)}
-      />
+      <div className="relative">
+        <input
+          type={inputType}
+          maxLength={maxLength}
+          inputMode={inputMode ?? keyboardFor(fmt)}
+          value={value}
+          onChange={e => onChange(fmt ? cleanValue(fmt, e.target.value) : e.target.value)}
+          onBlur={() => { setTouched(true); if (fmt === 'name' && value !== value.trim()) onChange(value.trim()); }}
+          placeholder={placeholder}
+          disabled={disabled}
+          autoComplete={isPassword ? 'new-password' : undefined}
+          className={`${fieldClass(shown)}${isPassword ? ' pr-10' : ''}`}
+        />
+        {isPassword && (
+          <button
+            type="button"
+            onClick={() => setReveal(r => !r)}
+            disabled={disabled}
+            aria-label={reveal ? 'Hide password' : 'Show password'}
+            title={reveal ? 'Hide password' : 'Show password'}
+            className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-gray-400 hover:text-gray-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 disabled:opacity-50"
+          >
+            {reveal ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+          </button>
+        )}
+      </div>
       <FieldError error={shown} />
     </div>
   );

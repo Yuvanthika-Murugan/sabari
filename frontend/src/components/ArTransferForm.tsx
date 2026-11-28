@@ -15,7 +15,7 @@ import { ArrowRightLeft } from 'lucide-react';
 const empty = { branchId: '', groupValue: '', series: '', toGroupId: '', transferDate: '', customerId: '', toStaffId: '', reason: '' };
 const NO_SERIES = '-';
 
-export default function ArTransferForm({ isOpen, onClose, customerId = '' }: { isOpen: boolean; onClose: () => void; customerId?: string }) {
+export default function ArTransferForm({ isOpen, onClose, customerId = '', title = 'Transfer AR Subscriber to Chit Group' }: { isOpen: boolean; onClose: () => void; customerId?: string; title?: string }) {
   const { customers, dueSchedules, branches, groups, users, today } = useData();
   const form = useForm({ ...empty, transferDate: today, customerId });
   const v = form.values;
@@ -79,7 +79,7 @@ export default function ArTransferForm({ isOpen, onClose, customerId = '' }: { i
 
   const missing = !v.toGroupId ? 'Choose the group first' : !v.customerId ? 'Select the customer' : '';
   return (
-    <Modal isOpen={isOpen} onClose={close} title="Transfer AR Subscriber to Chit Group" size="2xl"
+    <Modal isOpen={isOpen} onClose={close} title={title} size="2xl"
       footer={<ModalFooter onCancel={close} onSubmit={save} submitLabel="Transfer" submitting={form.submitting}
         disabled={!!missing || vacant <= 0 || (branchChanges && !v.toStaffId)} icon={<ArrowRightLeft className="w-4 h-4" />} />}
     >

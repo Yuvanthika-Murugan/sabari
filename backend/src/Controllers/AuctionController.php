@@ -7,6 +7,7 @@ namespace App\Controllers;
 use App\Core\Auth;
 use App\Core\DB;
 use App\Core\HttpException;
+use App\Core\Input;
 use App\Core\Request;
 use App\Models\Auction;
 use App\Models\BankAccount;
@@ -101,16 +102,28 @@ final class AuctionController
         });
     }
 
-    /** Pays the prize to the winner from cash or a bank account. */
+    /** Pays the prize to the winner from cash or a bank account (Direct Payment). */
     public static function pay(Request $req, int $id): array
     {
         Auth::requireRole('md', 'admin');
         $auction = Auction::find($id);
+        DB::transaction(function () use ($req, $auction) {
+            $paid = self::payPrize($auction, $req->input());
+            BidPaymentController::recordDirect($auction, $paid);
+        });
+        return Auction::find($id);
+    }
+
+    /**
+     * Validates the payout fields (payoutMode, bankAccountId, payoutReference, paidDate),
+     * books the prize in the cash / bank book and marks the auction paid.
+     * Returns [mode, bankAccountId, reference, date]. Call inside a transaction.
+     */
+    public static function payPrize(array $auction, Input $in): array
+    {
         if ($auction['payoutStatus'] === 'paid') {
             throw HttpException::unprocessable('This prize has already been paid');
         }
-
-        $in = $req->input();
         $mode = $in->enum('payoutMode', ['cash', 'bank_transfer', 'cheque']);
         $accountId = $in->id('bankAccountId', $mode !== null && $mode !== 'cash');
         $reference = $in->reference('payoutReference', $mode !== null && $mode !== 'cash');
@@ -128,22 +141,20 @@ final class AuctionController
         $in->validate();
         Ledger::assertDayOpen($date);
 
-        DB::transaction(function () use ($auction, $id, $mode, $accountId, $reference, $date) {
-            $description = "Prize payout {$auction['auctionCode']} - {$auction['customerName']}";
-            if ($mode === 'cash') {
-                Ledger::cash($date, $auction['auctionCode'], $description, $auction['prizeAmount'], 0, 'payment');
-            } else {
-                Ledger::bank($accountId, $date, $description, 0, $auction['prizeAmount'], 'withdrawal');
-            }
-            Auction::update($id, [
-                'payout_status' => 'paid',
-                'payout_mode' => $mode,
-                'bank_account_id' => $mode === 'cash' ? null : $accountId,
-                'payout_reference' => $reference,
-                'paid_date' => $date,
-            ]);
-            Audit::log('Prize Paid', 'Auctions', $auction['auctionCode'], 'pending', Audit::money($auction['prizeAmount']) . " ($mode)");
-        });
-        return Auction::find($id);
+        $description = "Prize payout {$auction['auctionCode']} - {$auction['customerName']}";
+        if ($mode === 'cash') {
+            Ledger::cash($date, $auction['auctionCode'], $description, $auction['prizeAmount'], 0, 'payment');
+        } else {
+            Ledger::bank($accountId, $date, $description, 0, $auction['prizeAmount'], 'withdrawal');
+        }
+        Auction::update((int) $auction['id'], [
+            'payout_status' => 'paid',
+            'payout_mode' => $mode,
+            'bank_account_id' => $mode === 'cash' ? null : $accountId,
+            'payout_reference' => $reference,
+            'paid_date' => $date,
+        ]);
+        Audit::log('Prize Paid', 'Auctions', $auction['auctionCode'], 'pending', Audit::money($auction['prizeAmount']) . " ($mode)");
+        return [$mode, $mode === 'cash' ? null : $accountId, $reference, $date];
     }
 }

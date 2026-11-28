@@ -22,6 +22,7 @@ const sumBy = <T,>(rows: T[], key: (r: T) => string, value: (r: T) => number) =>
 
 /** Cash, bank and day-end books are office data (the server sends staff none). */
 const OFFICE: Role[] = ['md', 'admin', 'manager'];
+const ADMIN: Role[] = ['md', 'admin'];
 
 /** Each report: where "View" goes, which rows "Excel" exports, and who may see it (everyone when omitted). */
 const reportList: { id: string; name: string; desc: string; icon: typeof Calendar; color: string; path: string; rows: (d: AppData) => Row[]; roles?: Role[] }[] = [
@@ -36,12 +37,12 @@ const reportList: { id: string; name: string; desc: string; icon: typeof Calenda
   { id: 'pending', name: 'Pending Report', desc: 'All pending dues', icon: AlertCircle, color: 'bg-warning-50 text-warning-600', path: '/pending/customer',
     rows: d => d.dueSchedules.filter(x => x.pendingAmount > 0 && x.dueDate <= d.today) as unknown as Row[] },
   { id: 'payment', name: 'Payment Report', desc: 'Payment transactions', icon: CreditCard, color: 'bg-primary-50 text-primary-600', path: '/payments/entry', rows: d => d.paymentApprovals as unknown as Row[] },
-  { id: 'cash', name: 'Cash Report', desc: 'Cash flow statement', icon: Wallet, color: 'bg-success-50 text-success-600', path: '/cash-bank/cash', rows: d => d.cashTransactions as unknown as Row[], roles: OFFICE },
-  { id: 'bank', name: 'Bank Report', desc: 'Bank transactions', icon: Landmark, color: 'bg-primary-50 text-primary-600', path: '/cash-bank/statement', rows: d => d.bankTransactions as unknown as Row[], roles: OFFICE },
+  { id: 'cash', name: 'Cash Report', desc: 'Cash flow statement', icon: Wallet, color: 'bg-success-50 text-success-600', path: '/cash-bank/cash', rows: d => d.cashTransactions as unknown as Row[], roles: ADMIN },
+  { id: 'bank', name: 'Bank Report', desc: 'Bank transactions', icon: Landmark, color: 'bg-primary-50 text-primary-600', path: '/cash-bank/statement', rows: d => d.bankTransactions as unknown as Row[], roles: ADMIN },
   { id: 'voucher', name: 'Voucher Report', desc: 'All vouchers', icon: ClipboardList, color: 'bg-gold-50 text-gold-600', path: '/payments/voucher', rows: d => d.vouchers as unknown as Row[] },
   { id: 'approval', name: 'Approval Report', desc: 'Payment approvals', icon: CheckCircle2, color: 'bg-success-50 text-success-600', path: '/payments/approval',
     rows: d => d.paymentApprovals.filter(p => p.managerId || p.mdId) as unknown as Row[] },
-  { id: 'dayend', name: 'Day End Report', desc: 'Daily closing reports', icon: CalendarClock, color: 'bg-warning-50 text-warning-600', path: '/day-end', rows: d => d.dayEndClosings as unknown as Row[], roles: OFFICE },
+  { id: 'dayend', name: 'Day End Report', desc: 'Daily closing reports', icon: CalendarClock, color: 'bg-warning-50 text-warning-600', path: '/day-end', rows: d => d.dayEndClosings as unknown as Row[], roles: ADMIN },
   { id: 'closing', name: 'Customer Closing Report', desc: 'Completed customer statements', icon: FileText, color: 'bg-primary-50 text-primary-600', path: '/statements',
     rows: d => d.customers.filter(c => c.status === 'closed') as unknown as Row[] },
 ];

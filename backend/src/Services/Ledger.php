@@ -59,7 +59,7 @@ final class Ledger
      * A "chit" receipt is a regular installment. An "arrear" receipt may only
      * be applied to dues that fell due before $date.
      */
-    public static function collect(int $customerId, ?int $dueNumber, float $amount, string $mode, string $reference, string $date, string $time, string $remarks, string $type = 'chit'): string
+    public static function collect(int $customerId, ?int $dueNumber, float $amount, string $mode, string $reference, string $date, string $time, string $remarks, string $type = 'chit', string $upiId = '', string $accountHolder = ''): string
     {
         self::assertDayOpen($date);
 
@@ -109,6 +109,8 @@ final class Ledger
             'pending_amount' => max(0, $first['due_amount'] - $first['paid_amount'] - $amount),
             'payment_mode' => $mode,
             'reference_no' => $reference,
+            'upi_id' => $upiId,
+            'account_holder' => $accountHolder,
             'collection_date' => $date,
             'collection_time' => $time,
             'remarks' => $remarks,

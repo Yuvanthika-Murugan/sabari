@@ -19,7 +19,21 @@ final class DashboardReport
             "collection_date >= DATE_FORMAT(CURDATE() - INTERVAL 1 MONTH, '%Y-%m-01') AND collection_date <= CURDATE() - INTERVAL 1 MONTH"
         );
 
+        // Total Cash / Total Bank: money received by mode, less the expenses paid from it.
+        $cashCollected = $collected("payment_mode = 'cash'");
+        $bankCollected = $collected("payment_mode <> 'cash'");
+        $cashExpense = Expense::total('cash');
+        $bankExpense = Expense::total('bank');
+
         $stats = [
+            'cashCollected' => $cashCollected,
+            'bankCollected' => $bankCollected,
+            'cashExpense' => $cashExpense,
+            'bankExpense' => $bankExpense,
+            'expenseTotal' => $cashExpense + $bankExpense,
+            'todayExpense' => (float) DB::value('SELECT COALESCE(SUM(amount), 0) FROM expenses WHERE expense_date = CURDATE()'),
+            'totalCash' => $cashCollected - $cashExpense,
+            'totalBank' => $bankCollected - $bankExpense,
             'todayCollection' => $today,
             'todayChange' => self::change($today, $yesterday),
             'thisMonthCollection' => $thisMonth,

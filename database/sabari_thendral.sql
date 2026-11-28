@@ -578,6 +578,9 @@ INSERT INTO `customers` VALUES (1,'CUST00001','Murugan','Valli Murugan','Shiva',
 /*!40000 ALTER TABLE `customers` ENABLE KEYS */;
 UNLOCK TABLES;
 
+-- Migration 008: nominee mobile (added after the data so the positional INSERT above still loads)
+ALTER TABLE `customers` ADD COLUMN `nominee_mobile` VARCHAR(20) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '' AFTER `nominee_relation`;
+
 --
 -- Table structure for table `day_end_closings`
 --
@@ -919,3 +922,40 @@ UNLOCK TABLES;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
 -- Dump completed on 2026-11-05 17:34:26
+
+-- Migration 009: expenses + bank details on receipts (appended after the data so the positional INSERTs above still load)
+ALTER TABLE collections
+  ADD COLUMN upi_id         VARCHAR(60)  NOT NULL DEFAULT '' AFTER reference_no,
+  ADD COLUMN account_holder VARCHAR(120) NOT NULL DEFAULT '' AFTER upi_id;
+CREATE TABLE IF NOT EXISTS expenses (
+  id            INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  expense_no    VARCHAR(20) NOT NULL UNIQUE,
+  expense_date  DATE NOT NULL,
+  category      VARCHAR(60) NOT NULL,
+  amount        DECIMAL(14,2) NOT NULL,
+  payment_mode  ENUM('cash','bank') NOT NULL,
+  agent_id      INT UNSIGNED NULL,
+  remarks       VARCHAR(255) NOT NULL DEFAULT '',
+  created_by    INT UNSIGNED NULL,
+  created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_expense_date (expense_date),
+  CONSTRAINT fk_expenses_agent FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE SET NULL,
+  CONSTRAINT fk_expenses_user FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+-- Migration 010: staff debits, denominations, staff live location (appended after the data)
+ALTER TABLE expenses
+  ADD COLUMN staff_id INT UNSIGNED NULL AFTER agent_id,
+  ADD CONSTRAINT fk_expenses_staff FOREIGN KEY (staff_id) REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE collections
+  ADD COLUMN denominations VARCHAR(255) NOT NULL DEFAULT '' AFTER account_holder,
+  ADD COLUMN latitude  DECIMAL(10,7) NULL AFTER denominations,
+  ADD COLUMN longitude DECIMAL(10,7) NULL AFTER latitude;
+CREATE TABLE IF NOT EXISTS staff_locations (
+  user_id     INT UNSIGNED PRIMARY KEY,
+  latitude    DECIMAL(10,7) NOT NULL,
+  longitude   DECIMAL(10,7) NOT NULL,
+  accuracy    INT UNSIGNED NULL,
+  updated_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_staff_locations_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB;

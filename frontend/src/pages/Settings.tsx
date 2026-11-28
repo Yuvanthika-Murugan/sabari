@@ -6,8 +6,7 @@ import { checks } from '@/lib/validation';
 import { useApp } from '@/context/AppContext';
 import { useData } from '@/context/DataContext';
 import { useForm } from '@/hooks/useForm';
-import PhotoInput, { Avatar } from '@/components/PhotoInput';
-import { api } from '@/lib/api';
+import PhotoInput, { Avatar } from '@/components/PhotoInput';import { api } from '@/lib/api';
 import type { CompanySettings, User } from '@/types';
 import {
   Building, User as UserIcon, Bell, Shield, KeyRound, Landmark, MapPin, Receipt, CalendarRange,
@@ -265,7 +264,7 @@ export default function Settings() {
               <Panel title="Account protection" description="Safeguards that are always on for every user.">
                 <div className="space-y-2">
                   <StatusRow icon={<LogIn className="w-4 h-4" />} title="Login history" detail="Sign-ins, sign-outs, failed attempts and password changes are recorded" to={isAdmin ? '/company/logins' : undefined} />
-                  <StatusRow icon={<ScrollText className="w-4 h-4" />} title="Audit logging" detail="Every financial change is recorded with user, old and new value" to={currentUser?.role !== 'staff' ? '/audit' : undefined} />
+                  <StatusRow icon={<ScrollText className="w-4 h-4" />} title="Audit logging" detail="Every financial change is recorded with user, old and new value" to={isAdmin ? '/audit' : undefined} />
                   <StatusRow icon={<Shield className="w-4 h-4" />} title="Session expiry" detail="Every sign-in expires automatically after a set number of hours (12 by default)" />
                 </div>
               </Panel>
@@ -278,7 +277,7 @@ export default function Settings() {
                 <div className="space-y-2">
                   <StatusRow icon={<CheckCircle2 className="w-4 h-4" />} title="MD approval for payments" detail="Every payment needs manager acceptance, then MD approval" to="/payments/approval" />
                   <StatusRow icon={<CheckCircle2 className="w-4 h-4" />} title="Voucher approval" detail="Manager vouchers wait for MD or Admin approval" to="/payments/voucher" />
-                  <StatusRow icon={<Lock className="w-4 h-4" />} title="Day end lock" detail="No new entries for a closed day" to={currentUser?.role !== 'staff' ? '/day-end' : undefined} />
+                  <StatusRow icon={<Lock className="w-4 h-4" />} title="Day end lock" detail="No new entries for a closed day" to={isAdmin ? '/day-end' : undefined} />
                   <StatusRow icon={<BadgePercent className="w-4 h-4" />} title="Auction & commission rules"
                     detail={`Foreman ${commission.foremanCommissionPct}% · max bid ${commission.maxBidPct}% · agent ${commission.agentCommissionPct}%`}
                     to={currentUser?.role !== 'staff' ? '/setup/commission' : undefined} />

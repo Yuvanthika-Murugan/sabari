@@ -8,8 +8,13 @@ import { BRAND, HERO_IMAGE } from '@/lib/brand';
 // a production build (npm run build) leaves it out, so the MD password is never
 // published on the live sign-in page.
 const showDemoLogin = import.meta.env.DEV;
-const demoAccount = { email: 'rajesh@fincol.in', password: 'password', label: 'Managing Director', desc: 'Full system access' };
+const demoAccount = { email: 'rajesh@fincol.in', password: 'password', label: 'Managing Director', desc: 'Opens the Super Admin (MD) panel' };
 
+/**
+ * One sign-in form for everyone: Super Admin (MD), Admin, Manager, Staff and Agents.
+ * Each user is taken to their own panel by role: the MD to the Super Admin panel,
+ * collection staff / agents to the collection app, everyone else to the Admin panel.
+ */
 export default function Login() {
   const navigate = useNavigate();
   const { login } = useApp();
@@ -24,8 +29,8 @@ export default function Login() {
     setLoading(true);
     setError(null);
     try {
-      await login(email, password);
-      navigate('/dashboard');
+      const { user, superAdmin } = await login(email, password);
+      navigate(superAdmin ? '/super-admin' : user.role === 'staff' ? '/collect' : '/dashboard', { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Sign in failed');
       setLoading(false);
@@ -85,9 +90,16 @@ export default function Login() {
           {/* Sign-in form */}
           <div className="bg-white p-6 sm:p-10">
             <div className="mb-7">
-              <div className="w-12 h-12 rounded-2xl bg-primary-50 text-primary-700 flex items-center justify-center mb-4"><Lock className="w-6 h-6" /></div>
+              <div className="w-12 h-12 rounded-2xl flex items-center justify-center mb-4 bg-primary-50 text-primary-700">
+                <Lock className="w-6 h-6" />
+              </div>
               <h2 className="text-2xl font-bold text-gray-900">Sign in</h2>
-              <p className="text-sm text-gray-500 mt-1">Use your email and password to open your dashboard.</p>
+              <p className="text-sm text-gray-500 mt-1">One sign-in for everyone. You'll be taken to your own panel.</p>
+              <div className="mt-3 flex flex-wrap gap-1.5" aria-label="Who can sign in here">
+                {['Super Admin', 'Admin', 'Manager', 'Staff', 'Agent'].map(r => (
+                  <span key={r} className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">{r}</span>
+                ))}
+              </div>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-5">
@@ -97,15 +109,17 @@ export default function Login() {
                 </div>
               )}
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1.5">Email Address</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1.5">Email or Login ID</label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                   <input
-                    type="email"
+                    type="text"
                     value={email}
                     onChange={e => setEmail(e.target.value)}
                     required
                     autoComplete="username"
+                    autoCapitalize="none"
+                    spellCheck={false}
                     className="w-full pl-10 pr-3 py-3 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:bg-white focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-colors"
                     placeholder="you@fincol.in"
                   />
@@ -139,10 +153,10 @@ export default function Login() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-primary-700 to-primary-900 hover:from-primary-600 hover:to-primary-800 text-white font-semibold rounded-xl transition-all disabled:opacity-60 shadow-lg shadow-primary-900/20"
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 font-semibold rounded-xl transition-all disabled:opacity-60 shadow-lg bg-gradient-to-r from-primary-700 to-primary-900 hover:from-primary-600 hover:to-primary-800 text-white shadow-primary-900/20"
               >
                 {loading ? (
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <div className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin border-white" />
                 ) : (
                   <>
                     Sign In <ArrowRight className="w-4 h-4" />

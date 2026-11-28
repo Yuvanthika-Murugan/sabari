@@ -19,7 +19,7 @@ final class DayEndController
 {
     public static function index(Request $req): array
     {
-        return Visibility::officeOnly(DayEndClosing::all());
+        return Visibility::adminOnly(DayEndClosing::all());
     }
 
     public static function close(Request $req, int $id): array

@@ -36,6 +36,9 @@ export interface Customer {
   altMobile: string;
   address: string;
   area: string;
+  /** Map location of the customer (house / shop); null until a GPS receipt or staff sets it. */
+  latitude: string | null;
+  longitude: string | null;
   branchId: string;
   staffId: string;
   agentId: string;
@@ -92,6 +95,9 @@ export interface Agent {
   commissionPct: number;
   joiningDate: string;
   status: 'active' | 'inactive';
+  /** Linked login account (role staff), '' when the agent cannot sign in. */
+  userId: string;
+  loginEmail: string;
 }
 
 export interface Auction {
@@ -115,6 +121,68 @@ export interface Auction {
   payoutReference: string;
   paidDate: string;
   remarks: string;
+}
+
+/** Bid (prize) payment to an auction winner: Apply -> Verify -> Approval (MD) -> Document -> Doc Verify (MD) -> Payment Entry. */
+export interface BidPayment {
+  id: string;
+  requestNo: string;
+  auctionId: string;
+  auctionCode: string;
+  auctionNo: number;
+  auctionDate: string;
+  customerId: string;
+  customerCode: string;
+  customerName: string;
+  mobile: string;
+  branchId: string;
+  branchName: string;
+  groupId: string;
+  groupName: string;
+  groupCode: string;
+  groupValue: number;
+  bidAmount: number;
+  /** Group value less the dividend shared with members. */
+  auctionAmount: number;
+  commissionAmount: number;
+  /** Auction amount less commission = the prize paid. */
+  toPay: number;
+  type: 'request' | 'direct';
+  status: 'applied' | 'verified' | 'approved' | 'documented' | 'doc_verified' | 'paid' | 'rejected';
+  applyNote: string;
+  appliedBy: string;
+  appliedAt: string;
+  verifiedBy: string;
+  verifiedAt: string;
+  approvedBy: string;
+  approvedAt: string;
+  documents: string;
+  documentNote: string;
+  documentedBy: string;
+  documentedAt: string;
+  docVerifiedBy: string;
+  docVerifiedAt: string;
+  rejectNote: string;
+  rejectedStage: string;
+  rejectedBy: string;
+  rejectedAt: string;
+  payoutMode: '' | 'cash' | 'bank_transfer' | 'cheque';
+  bankAccountId: string;
+  payoutReference: string;
+  paidDate: string;
+  paidBy: string;
+  /** Scanned documents uploaded at the Document step. */
+  files: BidDocumentFile[];
+}
+
+export interface BidDocumentFile {
+  id: string;
+  document: string;
+  fileName: string;
+  mime: string;
+  size: number;
+  uploadedBy: string;
+  uploadedAt: string;
 }
 
 export interface Group {
@@ -199,6 +267,16 @@ export interface Collection {
   pendingAmount: number;
   paymentMode: 'cash' | 'upi' | 'bank_transfer' | 'cheque';
   referenceNo: string;
+  /** Payer's UPI ID and account holder name for bank receipts ('' for cash). */
+  upiId: string;
+  accountHolder: string;
+  /** Cash notes counted, e.g. "500x2,100x3" ('' when not counted). */
+  denominations: string;
+  /** Where the receipt was made (staff phone GPS); null when unknown. */
+  latitude: string | null;
+  longitude: string | null;
+  /** The customer's area. */
+  area: string;
   date: string;
   time: string;
   remarks: string;
@@ -371,6 +449,15 @@ export interface DashboardData {
     cashBalance: number;
     bankBalance: number;
     approvalsPending: number;
+    /** All-time receipts by mode, expenses by mode, and the net figures shown as Total Cash / Total Bank. */
+    cashCollected: number;
+    bankCollected: number;
+    cashExpense: number;
+    bankExpense: number;
+    expenseTotal: number;
+    todayExpense: number;
+    totalCash: number;
+    totalBank: number;
   };
   dailyTrend: { day: string; collection: number; pending: number }[];
   monthlyTrend: { month: string; collection: number; pending: number }[];
@@ -396,6 +483,79 @@ export interface CommissionSettings {
   agentCommissionPct: number;
 }
 
+export interface Expense {
+  id: string;
+  expenseNo: string;
+  date: string;
+  category: string;
+  amount: number;
+  paymentMode: 'cash' | 'bank';
+  /** Agent the money was handed over to ('' when none). */
+  agentId: string;
+  agentName: string;
+  /** Collection staff member the debit belongs to ('' for office expenses). */
+  staffId: string;
+  staffName: string;
+  remarks: string;
+  createdBy: string;
+}
+
+/** Chit settlement (payout): staff / agent request -> Super Admin approve / reject -> Admin pay. */
+export interface ChitSettlement {
+  id: string;
+  settlementNo: string;
+  customerId: string;
+  customerCode: string;
+  customerName: string;
+  mobile: string;
+  groupId: string;
+  groupName: string;
+  groupCode: string;
+  groupValue: number;
+  amount: number;
+  status: 'requested' | 'approved' | 'rejected' | 'paid';
+  requestNote: string;
+  requestedBy: string;
+  requestedAt: string;
+  decisionNote: string;
+  decidedBy: string;
+  decidedAt: string;
+  payoutMode: '' | 'cash' | 'bank_transfer' | 'cheque';
+  bankAccountId: string;
+  payoutReference: string;
+  paidDate: string;
+  paidBy: string;
+  /** The customer's last instalment date in that group. */
+  finalDueDate: string;
+  staffId: string;
+  agentId: string;
+}
+
+/** Cash a collection staff member / agent handed over to the office (does not touch the cash book). */
+export interface CashHandover {
+  id: string;
+  handoverNo: string;
+  date: string;
+  time: string;
+  userId: string;
+  userName: string;
+  amount: number;
+  remarks: string;
+  createdBy: string;
+}
+
+/** Latest phone position of a collection staff member. */
+export interface StaffLocation {
+  userId: string;
+  name: string;
+  role: string;
+  latitude: number;
+  longitude: number;
+  accuracy: number;
+  updatedAt: string;
+  minutesAgo: number;
+}
+
 /** Payload of GET /api/bootstrap. */
 export interface AppData {
   users: User[];
@@ -410,9 +570,14 @@ export interface AppData {
   collections: Collection[];
   cancelledReceipts: Collection[];
   auctions: Auction[];
+  bidPayments: BidPayment[];
   paymentApprovals: PaymentApproval[];
   vouchers: Voucher[];
   withdrawals: Withdrawal[];
+  expenses: Expense[];
+  cashHandovers: CashHandover[];
+  settlements: ChitSettlement[];
+  staffLocations: StaffLocation[];
   bankAccounts: BankAccount[];
   bankTransactions: BankTransaction[];
   cashTransactions: CashTransaction[];

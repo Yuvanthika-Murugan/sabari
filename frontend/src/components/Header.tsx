@@ -1,38 +1,33 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Bell, LogOut, Check, Menu } from 'lucide-react';
+import { Search, Menu } from 'lucide-react';
+import NotificationBell from '@/components/NotificationBell';
+import LogoutButton from '@/components/LogoutButton';
 import { useIsDesktop } from '@/hooks/useMediaQuery';
 import { useApp } from '@/context/AppContext';
 import { Avatar } from '@/components/PhotoInput';
 import { useData } from '@/context/DataContext';
-import { notificationColors, useNotificationActions } from '@/hooks/useNotifications';
 
 
 export default function Header() {
-  const { currentUser, logout, setMobileNavOpen } = useApp();
+  const { currentUser, setMobileNavOpen } = useApp();
   const isDesktop = useIsDesktop();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
-  const [showNotif, setShowNotif] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
-  const { notifications: notifList, customers, groups, users, collections, paymentApprovals } = useData();
-  const { markRead, markAllRead } = useNotificationActions();
+  const { customers, groups, users, collections, paymentApprovals } = useData();
   const searchRef = useRef<HTMLDivElement>(null);
-  const notifRef = useRef<HTMLDivElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (searchRef.current && !searchRef.current.contains(e.target as Node)) setShowSearch(false);
-      if (notifRef.current && !notifRef.current.contains(e.target as Node)) setShowNotif(false);
       if (profileRef.current && !profileRef.current.contains(e.target as Node)) setShowProfile(false);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
-
-  const unreadCount = notifList.filter(n => !n.read).length;
 
   const searchIndex = useMemo(() => [
     ...customers.map(c => ({ label: c.name, sub: `${c.customerId} · ${c.mobile}`, path: '/customers/list' })),
@@ -97,49 +92,7 @@ export default function Header() {
         </div>
 
         <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
-          <div ref={notifRef} className="relative">
-            <button
-              onClick={() => setShowNotif(!showNotif)}
-              className="relative p-2 rounded-lg hover:bg-gray-100 transition-colors"
-            >
-              <Bell className="w-5 h-5 text-gray-600" />
-              {unreadCount > 0 && (
-                <span className="absolute top-1 right-1 w-4 h-4 bg-danger-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
-                  {unreadCount > 9 ? '9+' : unreadCount}
-                </span>
-              )}
-            </button>
-            {showNotif && (
-              <div className="fixed left-3 right-3 top-16 sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-2 sm:w-80 bg-white rounded-xl shadow-cardLg border border-gray-100 z-40 overflow-hidden">
-                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-                  <button onClick={() => { navigate('/notifications'); setShowNotif(false); }} className="text-sm font-semibold text-gray-900 hover:text-primary-700">Notifications</button>
-                  <button onClick={markAllRead} className="text-xs text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1">
-                    <Check className="w-3 h-3" /> Mark all read
-                  </button>
-                </div>
-                <div className="max-h-[70vh] sm:max-h-96 overflow-y-auto scrollbar-thin">
-                  {notifList.length === 0 && <p className="px-4 py-6 text-center text-sm text-gray-400">No notifications</p>}
-                  {notifList.slice(0, 20).map(n => (
-                    <button
-                      key={n.id}
-                      onClick={() => !n.read && markRead(n.id)}
-                      className={`w-full flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-left border-b border-gray-50 ${!n.read ? 'bg-primary-50/30' : ''}`}
-                    >
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${notificationColors[n.type]}`}>
-                        <Bell className="w-4 h-4" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900">{n.title}</p>
-                        <p className="text-xs text-gray-500 mt-0.5">{n.message}</p>
-                        <p className="text-xs text-gray-400 mt-1">{n.time}</p>
-                      </div>
-                      {!n.read && <div className="w-2 h-2 rounded-full bg-primary-500 flex-shrink-0 mt-1" />}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
+          <NotificationBell />
 
           <div ref={profileRef} className="relative">
             <button
@@ -164,12 +117,13 @@ export default function Header() {
                 <button onClick={() => { navigate('/settings'); setShowProfile(false); }} className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors">
                   Settings
                 </button>
-                <button onClick={logout} className="w-full text-left px-4 py-2 text-sm text-danger-600 hover:bg-danger-50 transition-colors flex items-center gap-2">
-                  <LogOut className="w-4 h-4" /> Logout
-                </button>
               </div>
             )}
           </div>
+
+          {/* Always visible, red, and the same in every panel. */}
+          <span className="hidden sm:block w-px h-8 bg-gray-200" aria-hidden="true" />
+          <LogoutButton tone="light" compact />
         </div>
       </div>
     </header>

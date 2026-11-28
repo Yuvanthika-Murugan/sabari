@@ -14,7 +14,8 @@ import { formatCurrency } from '@/lib/format';
 import type { Agent } from '@/types';
 import { UserPlus, Eye, Edit, Trash2, Users, Wallet, BadgePercent } from 'lucide-react';
 
-const emptyAgent = { name: '', mobile: '', branchId: '', commissionPct: '', joiningDate: '', status: 'active', address: '' };
+// email / password: the agent's login (collection app), set when the agent is added.
+const emptyAgent = { name: '', mobile: '', branchId: '', commissionPct: '', joiningDate: '', status: 'active', address: '', email: '', password: '' };
 
 export default function Agents() {
   const { agents, branches, customers, collections, commission, today } = useData();
@@ -48,7 +49,7 @@ export default function Agents() {
   const openForm = (a: Agent | 'new') => {
     form.reset(a === 'new' ? { ...emptyAgent, joiningDate: today, commissionPct: String(commission.agentCommissionPct) } : {
       name: a.name, mobile: a.mobile, branchId: a.branchId, commissionPct: String(a.commissionPct),
-      joiningDate: a.joiningDate, status: a.status, address: a.address,
+      joiningDate: a.joiningDate, status: a.status, address: a.address, email: '', password: '',
     });
     setEditing(a);
   };
@@ -70,6 +71,7 @@ export default function Agents() {
     { key: 'agentCode', label: 'Agent ID', sortable: true, render: (a: Row) => <span className="font-mono text-xs text-primary-600">{a.agentCode}</span> },
     { key: 'name', label: 'Name', sortable: true, render: (a: Row) => <span className="font-medium text-gray-900">{a.name}</span> },
     { key: 'mobile', label: 'Mobile', render: (a: Row) => <span className="text-gray-500">{a.mobile}</span> },
+    { key: 'loginEmail', label: 'Login', render: (a: Row) => a.loginEmail ? <span className="text-gray-600 text-sm">{a.loginEmail}</span> : <span className="text-xs text-gray-400">No login</span> },
     { key: 'branchId', label: 'Branch', render: (a: Row) => branches.find(b => b.id === a.branchId)?.name ?? '-' },
     { key: 'commissionPct', label: 'Commission', sortable: true, render: (a: Row) => `${a.commissionPct}%` },
     { key: 'customers', label: 'Customers', sortable: true },
@@ -111,6 +113,13 @@ export default function Agents() {
           <Input label="Joining Date" type="date" {...form.field('joiningDate')} />
           <Select label="Status" {...form.field('status')} options={[{ value: 'active', label: 'Active' }, { value: 'inactive', label: 'Inactive' }]} />
           <TextArea label="Address" {...form.field('address')} placeholder="Full address" className="col-span-full" />
+          {editing === 'new' && (
+            <>
+              <Input label="Login Email" type="email" {...form.field('email')} placeholder="agent@fincol.in" />
+              <Input label="Login Password" type="password" {...form.field('password')} placeholder="8+ characters, letters and numbers" required={!!form.values.email} />
+              <p className="col-span-full text-xs text-gray-500 -mt-2">Give an email and password so the agent can sign in to the collection app. Leave both empty for no login.</p>
+            </>
+          )}
         </div>
       </Modal>
 

@@ -4,6 +4,7 @@ import {
   Phone, Eye, Check, X, Send, Clock, Receipt, Users, UsersRound
 } from 'lucide-react';
 import KPICard from '@/components/KPICard';
+import StaffDayTable from '@/components/StaffDayTable';
 import Badge from '@/components/Badge';
 import { PageHeader, StatusBadge } from '@/components/PageHeader';
 import { useNavigate } from 'react-router-dom';
@@ -59,6 +60,8 @@ export default function Dashboard() {
     const p = paymentApprovals.find(pa => pa.id === id);
     if (p && await act(p, action)) setShowApproveModal(null);
   };
+  // Company cash/bank/expense figures and the staff collection table are for MD / Admin only.
+  const isAdmin = currentUser?.role === 'md' || currentUser?.role === 'admin';
   const trend = (v: number | null) => (v === null ? undefined : v >= 0 ? 'up' as const : 'down' as const);
 
   return (
@@ -67,16 +70,20 @@ export default function Dashboard() {
 
       {/* Main boxes — each opens its page. */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-        <KPICard title="Today Collected" value={formatCurrency(dashboardStats.todayCollection)} icon={<Wallet className="w-6 h-6" />} trend={trend(dashboardStats.todayChange)} trendValue={formatPercent(dashboardStats.todayChange, 'vs yesterday')} color="success" to="/collections/today" />
-        <KPICard title="Total Cash" value={formatCurrency(dashboardStats.cashBalance)} icon={<Banknote className="w-6 h-6" />} trend="neutral" trendValue="Cash in hand" color="success" to="/cash-bank/cash" />
-        <KPICard title="Total Bank" value={formatCurrency(dashboardStats.bankBalance)} icon={<Landmark className="w-6 h-6" />} trend="neutral" trendValue="All bank accounts" color="primary" to="/cash-bank/statement" />
-        {/* Placeholder: the expense figure will be defined later. */}
-        <KPICard title="Expense" value={formatCurrency(0)} icon={<Receipt className="w-6 h-6" />} trend="neutral" trendValue="To be set up" color="warning" />
-        <KPICard title="Total Customers" value={String(customers.length)} icon={<Users className="w-6 h-6" />} trend="neutral" trendValue={`${activeCustomers} active`} color="primary" to="/customers/list" />
-        <KPICard title="AR Subscribers" value={formatCurrency(arrearsTotal)} icon={<AlertCircle className="w-6 h-6" />} trend="neutral" trendValue={`${arSubscribers} subscriber${arSubscribers === 1 ? '' : 's'} overdue`} color="danger" to="/subscribers/arrears" state={{ show: 'arrears' }} />
-        <KPICard title="Chit Groups" value={String(activeGroups.length)} icon={<UsersRound className="w-6 h-6" />} trend="neutral" trendValue={`${formatCurrency(activeGroups.reduce((s, g) => s + g.groupValue, 0))} total value`} color="gold" to="/groups/list" />
-        <KPICard title="Completed AR Subscribers" value={String(completedSubscribers)} icon={<CheckCircle2 className="w-6 h-6" />} trend="neutral" trendValue="All dues paid" color="success" to="/subscribers/arrears" state={{ show: 'completed' }} />
+        {/* Row 1: money. Total Cash / Total Bank = receipts by mode less the expenses paid from them. */}
+        <KPICard title="Today Collect" value={formatCurrency(dashboardStats.todayCollection)} icon={<Wallet className="w-6 h-6" />} trend={trend(dashboardStats.todayChange)} trendValue={formatPercent(dashboardStats.todayChange, 'vs yesterday')} color="success" to="/receipts/entry" state={{ period: 'today' }} />
+        {isAdmin && <KPICard title="Total Cash" value={formatCurrency(dashboardStats.totalCash)} icon={<Banknote className="w-6 h-6" />} trend="neutral" trendValue={`${formatCurrency(dashboardStats.cashCollected)} received − ${formatCurrency(dashboardStats.cashExpense)} spent`} color="success" to="/receipts/entry" state={{ mode: 'cash', period: 'all' }} />}
+        {isAdmin && <KPICard title="Total Bank" value={formatCurrency(dashboardStats.totalBank)} icon={<Landmark className="w-6 h-6" />} trend="neutral" trendValue={`${formatCurrency(dashboardStats.bankCollected)} received − ${formatCurrency(dashboardStats.bankExpense)} spent`} color="primary" to="/receipts/entry" state={{ mode: 'bank', period: 'all' }} />}
+        {isAdmin && <KPICard title="Expense" value={formatCurrency(dashboardStats.expenseTotal)} icon={<Receipt className="w-6 h-6" />} trend="neutral" trendValue={`${formatCurrency(dashboardStats.todayExpense)} today`} note="Agent handover to be mentioned" color="warning" to="/expenses" />}
+        {/* Row 2: counts. */}
+        <KPICard title="Total Customer" value={String(customers.length)} icon={<Users className="w-6 h-6" />} trend="neutral" trendValue={`${activeCustomers} active`} color="primary" to="/customers/list" />
+        <KPICard title="AR Subscription" value={String(arSubscribers)} icon={<AlertCircle className="w-6 h-6" />} trend="neutral" trendValue={`${formatCurrency(arrearsTotal)} total value`} color="danger" to="/subscribers/arrears" state={{ show: 'arrears' }} />
+        <KPICard title="Chit Groups" value={String(groups.length)} icon={<UsersRound className="w-6 h-6" />} trend="neutral" trendValue={`${activeGroups.length} active · ${formatCurrency(activeGroups.reduce((s, g) => s + g.groupValue, 0))}`} color="gold" to="/groups/list" />
+        <KPICard title="Completed AR" value={String(completedSubscribers)} icon={<CheckCircle2 className="w-6 h-6" />} trend="neutral" trendValue="All dues paid" color="success" to="/subscribers/arrears" state={{ show: 'completed' }} />
       </div>
+
+      {/* Today Collection by staff. */}
+      {isAdmin && <StaffDayTable />}
 
       {/* Other figures */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
@@ -259,7 +266,7 @@ export default function Dashboard() {
                       <td className="px-3 py-2.5 whitespace-nowrap">
                         <div className="flex gap-1">
                           <a href={`tel:${c.mobile}`} className="p-1.5 rounded-lg hover:bg-primary-50 text-primary-600 transition-colors" title="Call"><Phone className="w-4 h-4" /></a>
-                          <button onClick={() => navigate('/statements')} className="p-1.5 rounded-lg hover:bg-primary-50 text-primary-600 transition-colors" title="View statement"><Eye className="w-4 h-4" /></button>
+                          <button onClick={() => navigate('/statements', { state: { customerId: c.id } })} className="p-1.5 rounded-lg hover:bg-primary-50 text-primary-600 transition-colors" title="View statement"><Eye className="w-4 h-4" /></button>
                         </div>
                       </td>
                     </tr>

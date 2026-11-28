@@ -18,7 +18,19 @@ final class Visibility
         return Auth::is('md', 'admin', 'manager');
     }
 
-    /** Rows only office roles may see (bank/cash books, vouchers, withdrawals, day end). */
+    /** The admin panel: MD and admin. Managers do not see company cash/bank books, day end or the audit trail. */
+    public static function admin(): bool
+    {
+        return Auth::is('md', 'admin');
+    }
+
+    /** Rows only MD / admin may see (cash and bank books, day end, audit log). */
+    public static function adminOnly(array $rows): array
+    {
+        return self::admin() ? $rows : [];
+    }
+
+    /** Rows only office roles may see (vouchers, withdrawals, staff locations). */
     public static function officeOnly(array $rows): array
     {
         return self::office() ? $rows : [];
@@ -38,10 +50,10 @@ final class Visibility
         ], $users);
     }
 
-    /** Staff may pick an account for a bank/UPI payment, but never see balances or full numbers. */
+    /** Others may pick an account for a bank/UPI payment, but only MD / admin see balances and full numbers. */
     public static function bankAccounts(array $accounts): array
     {
-        if (self::office()) {
+        if (self::admin()) {
             return $accounts;
         }
         return array_map(fn (array $a) => [
@@ -61,12 +73,13 @@ final class Visibility
         return array_values(array_filter($payments, fn (array $p) => $p['employeeId'] === '' || $p['employeeId'] === $me));
     }
 
-    /** Staff do not see company cash and bank balances. */
+    /** Only MD / admin see company cash and bank balances and expenses. */
     public static function dashboard(array $data): array
     {
-        if (!self::office()) {
-            $data['stats']['cashBalance'] = 0;
-            $data['stats']['bankBalance'] = 0;
+        if (!self::admin()) {
+            foreach (['cashBalance', 'bankBalance', 'cashCollected', 'bankCollected', 'cashExpense', 'bankExpense', 'expenseTotal', 'todayExpense', 'totalCash', 'totalBank'] as $key) {
+                $data['stats'][$key] = 0;
+            }
         }
         return $data;
     }

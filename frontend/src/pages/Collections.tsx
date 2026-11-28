@@ -5,6 +5,7 @@ import DataTable from '@/components/DataTable';
 import Badge from '@/components/Badge';
 import KPICard from '@/components/KPICard';
 import CollectionForm from '@/components/CollectionForm';
+import StaffDayTable from '@/components/StaffDayTable';
 import { paymentModeOptions } from '@/lib/options';
 import { Input, Select, FilterBar } from '@/components/FormControls';
 import { useData } from '@/context/DataContext';
@@ -52,6 +53,8 @@ export function TodaysCollection() {
         <KPICard title="Pending Till Today" value={formatCurrency(totalPending)} icon={<AlertCircle className="w-6 h-6" />} color="warning" />
         <KPICard title="Total Receipts" value={String(today.length)} icon={<Receipt className="w-6 h-6" />} color="primary" />
       </div>
+      <StaffDayTable />
+      <h3 className="text-base font-semibold text-gray-900 mb-3">Receipts today</h3>
       <DataTable columns={columns} data={today} searchKeys={['receiptNo','customerName']} pageSize={10} emptyMessage="No collections recorded today" />
 
       <CollectionForm isOpen={showCollect} onClose={() => setShowCollect(false)} />

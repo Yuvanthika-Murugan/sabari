@@ -21,6 +21,8 @@ final class Collection extends Model
         COALESCE(CAST(col.staff_id AS CHAR), '') AS staffId, COALESCE(u.name, '-') AS staffName,
         col.due_number AS dueNumber, col.due_amount AS dueAmount, col.collected_amount AS collectedAmount,
         col.pending_amount AS pendingAmount, col.payment_mode AS paymentMode, col.reference_no AS referenceNo,
+        col.upi_id AS upiId, col.account_holder AS accountHolder, col.denominations,
+        col.latitude, col.longitude, COALESCE(c.area, '') AS area,
         DATE_FORMAT(col.collection_date, '%Y-%m-%d') AS date, TIME_FORMAT(col.collection_time, '%H:%i') AS time,
         col.remarks, col.status, col.cancel_reason AS cancelReason, COALESCE(cu.name, '') AS cancelledBy,
         COALESCE(DATE_FORMAT(col.cancelled_at, '%Y-%m-%d %H:%i'), '') AS cancelledAt

@@ -1,9 +1,12 @@
 import { useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { ArrowLeft } from 'lucide-react';
 import { PageHeader, StatusBadge, ExportButtons } from '@/components/PageHeader';
 import DataTable from '@/components/DataTable';
 import Modal, { ModalFooter } from '@/components/Modal';
 import KPICard from '@/components/KPICard';
-import { Input, TextArea } from '@/components/FormControls';
+import { Input, Select, TextArea, FilterBar } from '@/components/FormControls';
+import { inDateRange } from '@/lib/format';
 import { useData } from '@/context/DataContext';
 import { useApp } from '@/context/AppContext';
 import { useForm } from '@/hooks/useForm';
@@ -12,7 +15,105 @@ import { formatCurrency } from '@/lib/format';
 import type { Customer, DayEndClosing } from '@/types';
 import { Wallet, TrendingUp, AlertCircle, Calendar, FileSpreadsheet, CheckCircle2, Lock } from 'lucide-react';
 
+const modeText = (m: string) => ({ cash: 'Cash', upi: 'UPI', bank_transfer: 'Bank', cheque: 'Cheque' }[m] ?? m);
+
+/**
+ * Passbook checking: every receipt as a passbook line, filtered by In / Out date,
+ * narration and staff. With customerId, only that customer's receipts (all dates).
+ */
+function Passbook({ customerId }: { customerId?: string }) {
+  const { collections, customers, users, today } = useData();
+  const [from, setFrom] = useState(customerId ? '' : today.slice(0, 8) + '01');
+  const [to, setTo] = useState(today);
+  const [narration, setNarration] = useState('');
+  const [staff, setStaff] = useState('');
+
+  const rows = collections.filter(c => !customerId || c.customerId === customerId).map(c => {
+    const cust = customers.find(x => x.id === c.customerId);
+    const text = [
+      `${c.receiptType === 'arrear' ? 'Arrear' : 'Installment'} #${c.dueNumber}`,
+      c.groupName !== '-' ? c.groupName : '',
+      modeText(c.paymentMode) + (c.upiId || c.referenceNo ? ` ${c.upiId || c.referenceNo}` : ''),
+      c.remarks,
+    ].filter(Boolean).join(' · ');
+    return { ...c, customerCode: cust?.customerId ?? '', narration: text };
+  }).filter(r => inDateRange(r.date, from, to)
+    && (!narration.trim() || r.narration.toLowerCase().includes(narration.trim().toLowerCase()))
+    && (!staff || r.staffId === staff));
+  type Row = typeof rows[0];
+  const total = rows.reduce((s, r) => s + r.collectedAmount, 0);
+
+  const columns = [
+    { key: 'date', label: 'Date', sortable: true, render: (r: Row) => <span>{r.date} <span className="text-gray-400">{r.time}</span></span> },
+    { key: 'receiptNo', label: 'Receipt No', render: (r: Row) => <span className="font-mono text-xs text-primary-600">{r.receiptNo}</span> },
+    { key: 'customerName', label: 'Customer', sortable: true, render: (r: Row) => <div><p className="font-medium">{r.customerName}</p><p className="text-xs text-gray-500 font-mono">{r.customerCode}</p></div> },
+    { key: 'narration', label: 'Narration', render: (r: Row) => <span className="text-sm text-gray-600">{r.narration}</span> },
+    { key: 'collectedAmount', label: 'Credit', sortable: true, render: (r: Row) => <span className="text-success-600 font-medium">{formatCurrency(r.collectedAmount)}</span> },
+    { key: 'staffName', label: 'Staff' },
+  ];
+
+  return (
+    <>
+      <FilterBar>
+        <Input label="In Date (From)" type="date" value={from} onChange={setFrom} />
+        <Input label="Out Date (To)" type="date" value={to} onChange={setTo} error={from && to && to < from ? 'Must be on or after the In date' : undefined} />
+        <Input label="Narration" value={narration} onChange={setNarration} placeholder="e.g. Installment, UPI, Gold" />
+        <Select label="Staff" value={staff} onChange={setStaff} options={users.filter(u => u.role !== 'md').map(u => ({ value: u.id, label: u.name }))} placeholder="All Staff" />
+        <ExportButtons filename="passbook" rows={rows} />
+      </FilterBar>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+        <KPICard title="Entries" value={String(rows.length)} icon={<FileSpreadsheet className="w-6 h-6" />} color="primary" />
+        <KPICard title="Total Credit" value={formatCurrency(total)} icon={<Wallet className="w-6 h-6" />} color="success" />
+      </div>
+      <DataTable columns={columns} data={rows} searchKeys={['customerName', 'customerCode', 'receiptNo', 'narration']} pageSize={10} emptyMessage="No passbook entries for these filters" />
+    </>
+  );
+}
+
 export function Statements() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  // Opened from a customer's "View statement" button: show only that customer.
+  const customerId = (location.state as { customerId?: string } | null)?.customerId;
+  const { customers, groups, dueSchedules } = useData();
+  const [tab, setTab] = useState<'passbook' | 'customers'>('passbook');
+  const tabBtn = (key: typeof tab, label: string) => (
+    <button onClick={() => setTab(key)} className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${tab === key ? 'border-primary-600 text-primary-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>{label}</button>
+  );
+
+  const focus = customerId ? customers.find(c => c.id === customerId) : undefined;
+  if (focus) {
+    const dues = dueSchedules.filter(d => d.customerId === focus.id).sort((a, b) => a.dueNumber - b.dueNumber);
+    const next = dues.find(d => d.pendingAmount > 0);
+    return (
+      <div className="animate-fade-in">
+        <PageHeader title={`Statement · ${focus.name}`} subtitle={`${focus.customerId} · ${focus.mobile} · ${groups.find(g => g.id === focus.groupId)?.groupName ?? '-'}`}
+          actions={<button onClick={() => navigate(-1)} className="flex items-center gap-1.5 px-3 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50"><ArrowLeft className="w-4 h-4" /> Back</button>} />
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <KPICard title="Total Due" value={formatCurrency(focus.totalDue)} icon={<Calendar className="w-6 h-6" />} trend="neutral" trendValue={`${dues.length} instalments`} color="primary" />
+          <KPICard title="Paid" value={formatCurrency(focus.paid)} icon={<CheckCircle2 className="w-6 h-6" />} trend="neutral" trendValue={`${dues.filter(d => d.pendingAmount <= 0).length} instalments paid`} color="success" />
+          <KPICard title="Pending" value={formatCurrency(focus.pending)} icon={<AlertCircle className="w-6 h-6" />} trend="neutral" trendValue={focus.pending > 0 ? 'Still to pay' : 'Fully paid'} color="danger" />
+          <KPICard title="Next Due" value={next ? formatCurrency(next.pendingAmount) : 'All paid'} icon={<TrendingUp className="w-6 h-6" />} trend="neutral" trendValue={next ? `${next.dueDate} · #${next.dueNumber}` : '-'} color="gold" />
+        </div>
+        <h3 className="text-sm font-semibold text-gray-900 mb-2">Receipts (passbook)</h3>
+        <Passbook customerId={focus.id} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="animate-fade-in">
+      <PageHeader title="Statement" subtitle="Passbook checking and customer statements" />
+      <div className="flex gap-2 border-b border-gray-200 mb-4 print:hidden">
+        {tabBtn('passbook', 'Passbook Checking')}
+        {tabBtn('customers', 'Customer Statements')}
+      </div>
+      {tab === 'passbook' ? <Passbook /> : <CustomerStatements />}
+    </div>
+  );
+}
+
+function CustomerStatements() {
   const { customers, branches, groups, dueSchedules } = useData();
   const [showCustomer, setShowCustomer] = useState<string | null>(null);
   const viewCustomer = customers.find(c => c.id === showCustomer);
@@ -34,8 +135,8 @@ export function Statements() {
   ];
 
   return (
-    <div className="animate-fade-in">
-      <PageHeader title="Statements" subtitle="Customer ledger and statements" actions={<ExportButtons filename="customer-balances" rows={customers} />} />
+    <div>
+      <div className="flex justify-end mb-3"><ExportButtons filename="customer-balances" rows={customers} /></div>
       <DataTable columns={columns} data={customers} searchKeys={['name','customerId','mobile']} pageSize={10} />
 
       <Modal isOpen={!!showCustomer} onClose={() => setShowCustomer(null)} title="Customer Statement" size="xl"

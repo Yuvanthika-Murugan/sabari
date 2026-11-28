@@ -24,3 +24,4 @@ backend/public/uploads/*
 
 # Local database backups
 database/backups/
+backend/storage/

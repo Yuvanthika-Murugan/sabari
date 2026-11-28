@@ -23,12 +23,12 @@ final class BankController
 
     public static function transactions(Request $req): array
     {
-        return Visibility::officeOnly(BankTransaction::all());
+        return Visibility::adminOnly(BankTransaction::all());
     }
 
     public static function cash(Request $req): array
     {
-        return Visibility::officeOnly(CashTransaction::all());
+        return Visibility::adminOnly(CashTransaction::all());
     }
 
     public static function storeAccount(Request $req): array

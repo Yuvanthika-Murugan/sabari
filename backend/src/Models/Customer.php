@@ -20,6 +20,7 @@ final class Customer extends Model
 
     protected const SELECT = "SELECT CAST(c.id AS CHAR) AS id, c.customer_code AS customerId, c.name,
         c.father_spouse_name AS fatherSpouseName, c.mobile, c.alt_mobile AS altMobile, c.address, c.area,
+        CAST(c.latitude AS CHAR) AS latitude, CAST(c.longitude AS CHAR) AS longitude,
         CAST(c.branch_id AS CHAR) AS branchId, COALESCE(CAST(c.staff_id AS CHAR), '') AS staffId,
         COALESCE(CAST(c.agent_id AS CHAR), '') AS agentId,
         COALESCE(CAST(c.group_id AS CHAR), '') AS groupId, DATE_FORMAT(c.joining_date, '%Y-%m-%d') AS joiningDate,
