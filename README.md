@@ -1,6 +1,6 @@
-# Sabari_Thendral — Finance Collection Management
+# Sabari Thendral — Finance Collection Management
 
-A chit-fund / finance collection ERP: branches, staff, agents, areas, customers, chit groups, due schedules, chit and arrear (AR) receipts, auctions with dividends and prize payouts, a three-step payment approval workflow, cash & bank books, day-end reconciliation, subscriber enquiry, reports, login history and an audit trail.
+A chit-fund / finance collection ERP: branches, staff, agents, areas, customers, chit groups, due schedules, chit and arrear (AR) receipts, bids (auctions) with dividends and a Bid Payments approval workflow with document upload, chit settlements, a three-step payment approval workflow, expenses, cash & bank books, day-end reconciliation, a mobile collection app for staff and agents (route map, cash handover), a separate Super Admin (MD) panel, subscriber enquiry, reports, login history and an audit trail.
 
 ```
 frontend/   React 18 + TypeScript + Vite + Tailwind (single-page app)
@@ -23,8 +23,8 @@ XAMPP covers PHP and MariaDB.
 Start MySQL (XAMPP Control Panel → MySQL → Start), then:
 
 ```bash
-mysql -u root -p < database/schema.sql            # creates the `Sabari_Thendral` database
-mysql -u root -p Sabari_Thendral < database/seed.sql   # optional demo data
+mysql -u root -p < database/schema.sql            # creates the `fincollect` database
+mysql -u root -p fincollect < database/seed.sql   # optional demo data
 ```
 
 With XAMPP you can also import both files in phpMyAdmin (schema first).
@@ -32,25 +32,38 @@ With XAMPP you can also import both files in phpMyAdmin (schema first).
 Upgrading an existing database? Run each migration in `database/migrations/` it doesn't have yet, in order, once:
 
 ```bash
-mysql -u root -p Sabari_Thendral < database/migrations/001_masters_receipts_auctions.sql   # agents, areas, AR receipts, auctions
-mysql -u root -p Sabari_Thendral < database/migrations/002_receipt_cancellation.sql        # receipt cancellation
-mysql -u root -p Sabari_Thendral < database/migrations/003_salary_payments.sql             # employee salaries
-mysql -u root -p Sabari_Thendral < database/migrations/004_subscriber_details.sql          # subscriber KYC, nominee, intimation
-mysql -u root -p Sabari_Thendral < database/migrations/005_group_codes.sql                # chit group codes, full group details
-mysql -u root -p Sabari_Thendral < database/migrations/006_user_photos.sql                # user profile photos
-mysql -u root -p Sabari_Thendral < database/migrations/007_login_security.sql             # sign-in brute-force protection
-mysql -u root -p Sabari_Thendral < database/migrations/008_nominee_mobile.sql             # nominee mobile number
+mysql -u root -p fincollect < database/migrations/001_masters_receipts_auctions.sql   # agents, areas, AR receipts, auctions
+mysql -u root -p fincollect < database/migrations/002_receipt_cancellation.sql        # receipt cancellation
+mysql -u root -p fincollect < database/migrations/003_salary_payments.sql             # employee salaries
+mysql -u root -p fincollect < database/migrations/004_subscriber_details.sql          # subscriber KYC, nominee, intimation
+mysql -u root -p fincollect < database/migrations/005_group_codes.sql                # chit group codes, full group details
+mysql -u root -p fincollect < database/migrations/006_user_photos.sql                # user profile photos
+mysql -u root -p fincollect < database/migrations/007_login_security.sql             # sign-in brute-force protection
+mysql -u root -p fincollect < database/migrations/008_nominee_mobile.sql             # nominee mobile number
+mysql -u root -p fincollect < database/migrations/009_expenses_receipt_bank.sql      # expenses, bank / UPI details on receipts
+mysql -u root -p fincollect < database/migrations/010_staff_debit_denomination_location.sql  # staff debits, cash denominations, GPS on receipts, live location
+mysql -u root -p fincollect < database/migrations/011_agent_login.sql                # agents can sign in to the collection app
+mysql -u root -p fincollect < database/migrations/012_cash_handovers.sql             # cash handed over by staff / agents
+mysql -u root -p fincollect < database/migrations/013_customer_location.sql          # customer map location
+mysql -u root -p fincollect < database/migrations/014_chit_settlements.sql           # chit settlement requests and payouts
+mysql -u root -p fincollect < database/migrations/015_bid_payments.sql               # Bid Payments workflow
+mysql -u root -p fincollect < database/migrations/016_bid_payment_files.sql          # documents uploaded for bid payments
 ```
+
+If the `mysql` client refuses to connect with a `caching_sha2_password` error, import the same files in phpMyAdmin instead.
 
 A fresh install from `schema.sql` already includes every migration.
 
 ### 2. Backend
 
-```bash
-cp backend/config/config.example.php backend/config/config.php
-# edit DB host/user/password and time zone if needed
+```powershell
+Copy-Item backend/config/config.example.php backend/config/config.php
+# Edit DB host/user/password and time zone in backend/config/config.php if needed
 php -S 127.0.0.1:8000 -t backend/public backend/public/index.php
 ```
+
+In Command Prompt, use `copy backend\config\config.example.php backend\config\config.php`
+instead of `Copy-Item`.
 
 On Windows with XAMPP, `php` may not be on the PATH; use its full path, from the project folder:
 
@@ -84,6 +97,12 @@ All seeded users have the password `password`.
 | Manager           | `priya@fincol.in`   | Customers, groups, transfers, vouchers; first-step payment acceptance |
 | Collection staff  | `anand@fincol.in`   | Own collection route, collections, payment submissions |
 
+There is **one sign-in page for everyone**. It takes an email, or the Super Admin **Login ID**:
+
+- **Super Admin (MD)** signs in with the Login ID and password set under Super Admin → User Management → Super Admin credentials, and lands in the **Super Admin Panel** (`/super-admin`). The panel has its own top bar with tabs Overview, Chit Settlements, Bid Approvals and User Management, a notification bell, and an **Admin Panel** button to look at the main app (a gold bar there leads back).
+- **Admin, Manager** land on the Admin panel (`/dashboard`).
+- **Collection staff and agents** land on the collection app (`/collect`). An agent gets a login when an email and password are entered for them in Users → Agents.
+
 These accounts exist only if you loaded `seed.sql`. On the dev server (`npm run dev`) the sign-in page has a **Demo login** button that fills in the MD account; a production build (`npm run build`) leaves it out. Before going live, change these passwords or delete the users.
 
 ## Menu
@@ -94,7 +113,7 @@ The sidebar is grouped into sections. Items a role cannot use are hidden.
 |---|---|
 | Master Data | Customers (Add, List, Transfer), AR Subscribers, Chit Groups (Create, List, Group-wise Customers) |
 | Company | Company Profile, Login History, Setup (Branch, Commission), Users (All Users, Admin, Agents, Areas — Managers see only Agents and Areas) |
-| Transaction Data | AR Receipt, Chit Receipt, Auction, Payment (Entry, Voucher, Approval), Collections (Today, Statement, Summary) |
+| Transaction Data | AR Receipt, Chit Receipt, Expenses, Bid Payments, Payment (Entry, Voucher, Approval, Chit Settlement), Collections (Today, Statement, Summary) |
 | System Enquiry | Subscriber Payments, Subscriber Profile |
 | Master Report | Master Report, All Reports, Pending, Statements |
 | Account Data | Cash & Bank, Day End |
@@ -150,8 +169,16 @@ frontend/src/
 - **Receipts**: a Chit Receipt is a regular installment (`RCP…`). An AR Receipt (`ARR…`) collects arrears only — installments past their due date — and cannot exceed them. MD/Admin can cancel a wrongly entered receipt (with a reason): only a customer's latest receipt can be cancelled, its amount goes back onto their dues, and a cash receipt gets a reversing entry in today's cash book. Cancelled receipts are excluded from every total and listed separately. Receipts created by an approved payment cannot be cancelled this way.
 - **Salaries**: each user has a monthly salary (Users). A Salary payment picks the employee and month; the form shows the salary, what's paid and awaiting approval for that month, and fills in the balance. The API refuses more than the month's balance. Only MD, Admin and Managers can enter salary payments; they follow the normal approval workflow and post to cash or bank on MD approval.
 - **Vouchers**: MD/Admin vouchers are approved on entry. Manager vouchers wait until an MD or Admin approves or rejects them; approved cash vouchers post to the cash book on the approval date.
-- **Auctions**: the winner bids a discount on the group value. The foreman commission (Commission Setup) comes out of the bid; the rest is a dividend that reduces every member's dues from that installment on. The prize (group value − bid) is paid from cash or a bank account, which must hold enough to cover it. Recorded auctions cannot be edited.
-- **Photos**: customers (Add/Edit Customer) and users (Add/Edit Staff, or My Profile) can have a photo. It is shrunk in the browser, then re-encoded by the server as a JPEG (max 600 px, 5 MB upload limit) under `backend/public/uploads/customers/` or `uploads/users/` with a random file name. Replacing, removing or deleting the record also removes the old file. Back up `backend/public/uploads/` along with the database.
+- **Bids (auctions)**: recorded with **New Bid** on the Bid Payments page. The office enters the **prize to the winner**; the bid (discount) is worked out as group value − prize and must lie between the foreman commission and the maximum bid (Commission Setup). The commission comes out of the bid; the rest is a dividend that reduces every member's dues from that installment on. Recorded bids cannot be edited. The **Bid Register** tab lists them all.
+- **Bid Payments** (`BP00001`): the prize is paid through **Apply → Verify → Approval (MD) → Document → Document Verify (MD) → Payment Entry**. Each tab shows how many requests wait at that step.
+  - Apply, Verify and Document: Manager / Admin / MD. Approval and Doc Verify: MD only, from the Super Admin panel's **Bid Approvals** tab. Payment Entry: Admin / MD, booked in the cash or bank book (which must hold enough).
+  - At Document, a scan or photo is uploaded for each document collected (Aadhaar, surety form, cheque leaves…; JPG, PNG, WebP or PDF, 5 MB each). The MD views them and either accepts them or sends them back.
+  - Any step can be rejected with a reason (after Verify, only by the MD). **Direct Payment** pays a winner without the steps.
+  - Amounts: Auction Amt = group value − dividend; To Pay = Auction Amt − commission. **Reports** lists every request with filters, Excel export and print.
+- **Chit settlements** (`SET000001`): when a customer's chit finishes, their collection staff / agent requests the payout from the collection app — once every instalment is paid, or from the day before the last one. The office can also raise it from the "Ready for settlement" list. The Super Admin approves (and may correct the amount) or rejects; the Admin then pays it out under Payment → Chit Settlement.
+- **Collection app** (staff and agents): My Customers with next payment, collected today, cash in hand and **cash handed over** to the office, today's **route map** (each stop by the receipt's GPS, the customer's saved location or address), UPI QR, and a statement view per customer. "Save location here" pins a customer's house / shop on the map; the first GPS receipt sets it automatically.
+- **Notifications**: the bell in the top bar (Admin panel and Super Admin panel) shows the unread count; in the Super Admin panel a notification opens the tab it is about.
+- **Photos**: customers (Add/Edit Customer) and users (Add/Edit Staff, or My Profile) can have a photo. It is shrunk in the browser, then re-encoded by the server as a JPEG (max 600 px, 5 MB upload limit) under `backend/public/uploads/customers/` or `uploads/users/` with a random file name. Replacing, removing or deleting the record also removes the old file. Back up `backend/public/uploads/` and `backend/storage/` (bid payment documents) along with the database.
 - **Codes**: the server assigns every code when a record is created, never the user: Employee ID `EMP001`, Customer ID `CUST00001`, Agent `AGT001`, Area `AREA001`, Group `GRP001`, receipts `RCP…`/`ARR…`, payments `PAY…`, vouchers `VCH…`. Forms show the next code as a preview. An Employee ID never changes after the user is created.
 - **Customer transfer**: moves a customer to another branch, group and/or collection staff, with a reason, and records it in Transfer History. At least one of the three must change, so a transfer needs a second branch, group or staff member to move to.
 - **Agents & areas**: customers can be linked to an agent (who earns their commission % on what those customers pay) and to an area from the Area master.
@@ -185,7 +212,7 @@ Number fields are plain text boxes that accept only digits (browsers' `type="num
 
 ## Database (ER diagrams)
 
-MySQL/MariaDB database `Sabari_Thendral`, 23 tables, all InnoDB / `utf8mb4`. The source of truth is [`database/schema.sql`](database/schema.sql). The diagrams below use Mermaid, which GitHub renders. In VS Code, install the *Markdown Preview Mermaid Support* extension to see them in the Markdown preview.
+MySQL/MariaDB database `fincollect`, 29 tables, all InnoDB / `utf8mb4`. The source of truth is [`database/schema.sql`](database/schema.sql). The diagrams below use Mermaid, which GitHub renders. In VS Code, install the *Markdown Preview Mermaid Support* extension to see them in the Markdown preview.
 
 How to read the lines: `||` exactly one, `|o` zero or one, `o{` zero or many. A solid line is a foreign key; a dotted line is a link the code relies on without a database constraint.
 
@@ -600,7 +627,13 @@ erDiagram
 | `customer_transfers` | Moves between branch / group / staff | |
 | `collections` | Chit and AR receipts, including cancelled ones | `RCP…` / `ARR…` (auto) |
 | `payment_approvals` | Customer, expense and salary payments in the 3-step workflow | `PAY00001` (auto) |
-| `auctions` | One auction per instalment: bid, dividend, prize payout | `AUC00001` (auto) |
+| `auctions` | One bid (auction) per instalment: bid, dividend, prize payout | `AUC00001` (auto) |
+| `bid_payments` | Prize payment requests through the Bid Payments steps | `BP00001` (auto) |
+| `bid_payment_files` | Documents uploaded for a bid payment (files in `backend/storage/bid-documents`) | |
+| `chit_settlements` | Payout requests when a customer's chit finishes | `SET000001` (auto) |
+| `expenses` | Office and staff expenses (debits) | |
+| `cash_handovers` | Cash handed to the office by collection staff and agents | |
+| `staff_locations` | Each collection staff member's latest live location | |
 | `bank_accounts` | Company bank accounts | |
 | `bank_transactions` | Bank book | `TXN…` (auto) |
 | `cash_transactions` | Cash book | |
@@ -638,7 +671,9 @@ npm run lint
 - **Passwords:** at least 8 characters with a letter and a number; common passwords are refused.
 - **Roles:** only an MD can edit, reset or delete an MD account. Collection staff do not receive bank/cash books, vouchers, withdrawals, day-end figures, the audit log, balances or colleagues' salaries and contact details.
 - **Requests:** SQL is always parameterised; request bodies over 8 MB are refused; uploaded photos are re-encoded as JPEG and scripts cannot run in `uploads/`.
-- **Before going live:** change every demo password, use a dedicated MySQL user (not `root`) with rights on `Sabari_Thendral` only, keep `debug` off, and serve the app over HTTPS. The Demo login button appears only on the dev server (`npm run dev`).
+- **Bid payment documents** (Aadhaar, PAN…) are checked by content (only real JPG / PNG / WebP / PDF), stored under random names in `backend/storage/bid-documents/`, outside the web root, and served only through the API to signed-in Managers, Admins and the MD. The folder is in `.gitignore`.
+- **Super Admin:** the Super Admin Login ID and password hash are kept in `settings`; only the Super Admin can change them.
+- **Before going live:** change every demo password, use a dedicated MySQL user (not `root`) with rights on `fincollect` only, keep `debug` off, and serve the app over HTTPS. The Demo login button appears only on the dev server (`npm run dev`).
 
 ## Production build
 
@@ -654,7 +689,7 @@ npm run build          # outputs frontend/dist
 
 ## Project history
 
-From the first version to now, oldest first. The project is not under version control, so steps 1–8 are in build order without exact dates; later entries are dated.
+From the first version to now, oldest first. Entries 1–8 describe the original feature build order; later entries include dated milestones.
 
 ### 1. First version: core collection system
 - React + TypeScript + Tailwind single-page app with a PHP REST API and MySQL database.
@@ -707,3 +742,13 @@ From the first version to now, oldest first. The project is not under version co
 - **Printing**: clean A4 printouts with the company letterhead, all table rows and no screen controls.
 - **Responsive layout**: slide-in menu on phones and tablets, single-column forms on phones, stacked page headers and filters.
 - This README: setup, validation rules, ER diagrams and this history.
+
+### 12. Collection app, Super Admin panel and payout workflows — migrations `009`–`016`, 28 Nov 2026
+- **One sign-in page** for every role (email, or the Super Admin Login ID). The **Super Admin (MD) panel** is separate from the Admin panel, with Overview, Chit Settlements, Bid Approvals and User Management tabs and a notification bell.
+- **Agents can sign in** to the collection app; show-password icon on password fields.
+- **Collection app**: collected today, cash in hand and **cash handovers**, today's **route map**, customer map locations, always-on UPI QR, and per-customer statement from the 👁 button.
+- **Customers**: agent filter with payment schedule, next due, map location in the customer view; chit group details shown when a group is selected; period filled in from the chit value.
+- **Expenses** module and bank / UPI details on receipts.
+- **Chit settlements**: staff / agent requests → Super Admin approves → Admin pays out.
+- **Bid Payments** (replaces the Auction page): Apply → Verify → Approval (MD) → Document (file upload) → Document Verify (MD) → Payment Entry, Direct Payment, Reports and Bid Register. A bid is entered as the prize to the winner.
+- Clearer sign-out vs. logout buttons, alignment fixes, and print layout fixes for the Bid Payments report.
